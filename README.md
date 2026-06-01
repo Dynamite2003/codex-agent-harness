@@ -29,6 +29,8 @@ uv run codex-harness run --config examples/basic.harness.json --goal "给现有 
 - `prompt.md`：传给 Codex 的阶段 prompt。
 - `context.json`：本阶段允许使用的上下文清单。
 - `command.sh`：根据配置生成的 Codex CLI 命令。
+- `stdout.txt` / `stderr.txt`：执行模式下保存 Codex CLI 输出。
+- `needs-user-input.md`：如果 Codex 在当前阶段要求用户补充信息，harness 会写入问题并停止后续阶段。
 - `conversation/`：当前阶段独立对话的预留目录，用来避免阶段间共享聊天上下文。
 
 默认阶段为：
@@ -52,6 +54,8 @@ uv run codex-harness run --config examples/basic.harness.json --goal "..." --exe
 - `implementation` 必须生成 `doc/prompt.md`。
 
 如果某个阶段完成后缺少声明的产物，harness 会失败并在该阶段目录写入 `status.json`。
+
+如果 Codex 在某个阶段输出 `HARNESS_NEEDS_USER_INPUT` 或明确要求用户确认/补充信息，执行模式会在同一个进程中暂停当前阶段，打印问题并等待你输入回答。输入多行回答后，用单独一行 `END` 提交；harness 会把回答记录到 `user-answers.md`，追加到当前阶段 `prompt.md`，重新执行同一阶段。只有当前阶段不再请求补充且产物校验通过后，才会进入下一阶段。如果 stdin 已关闭或回答为空，harness 会停止，并在该阶段目录写入 `needs-user-input.md` 和 `status.json`。
 
 本地未安装包时也可以直接运行：
 
@@ -85,7 +89,7 @@ uv add --dev ruff mypy pytest pytest-cov
 
 参考 [examples/basic.harness.json](examples/basic.harness.json)。重点字段：
 
-- `codex.command`：Codex CLI 命令模板。支持 `{prompt_file}`、`{prompt_stdin}`、`{phase_id}`、`{run_dir}`、`{project_root}`。当前 Codex CLI 推荐使用 `{prompt_stdin}`，harness 会把它渲染为 `-` 并通过 stdin 传入阶段 prompt。
+- `codex.command`：Codex CLI 命令模板。支持 `{prompt_file}`、`{prompt_stdin}`、`{phase_id}`、`{run_dir}`、`{project_root}`。当前 Codex CLI 推荐使用 `{prompt_stdin}`，harness 会把它渲染为 `-` 并通过 stdin 传入阶段 prompt；默认命令带 `--skip-git-repo-check`，允许在未初始化 git 或未信任目录中执行。
 - `isolation.new_conversation_per_phase`：默认为 `true`，每个阶段都作为新的 Codex 对话执行。
 - `isolation.artifact_only_context`：默认为 `true`，阶段之间只通过声明的 artifact 传递上下文。
 - `global_constraints`：每个阶段都会继承的约束。

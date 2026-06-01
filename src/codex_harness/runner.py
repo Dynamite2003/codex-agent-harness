@@ -6,6 +6,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from .config import HarnessConfig, Phase
 from .prompting import build_prompt
@@ -17,9 +18,16 @@ class PhaseRun:
     prompt_file: Path
     context_file: Path
     command_file: Path
+    stdout_file: Path
+    stderr_file: Path
+    needs_user_input_file: Path
     command: list[str]
     prompt_stdin: bool
     expected_outputs: list[Path]
+
+
+class PhaseNeedsUserInputError(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -29,12 +37,16 @@ class HarnessRun:
     phases: list[PhaseRun]
 
 
+UserInputProvider = Callable[[PhaseRun, str], str]
+
+
 def create_run(
     *,
     config: HarnessConfig,
     user_goal: str,
     project_root: Path,
     execute: bool = False,
+    user_input_provider: UserInputProvider | None = None,
 ) -> HarnessRun:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = project_root / config.workspace / "runs" / run_id
@@ -51,7 +63,11 @@ def create_run(
         )
         phase_runs.append(phase_run)
         if execute:
-            _execute_phase_command(phase_run, cwd=project_root)
+            _execute_phase_until_ready(
+                phase_run,
+                cwd=project_root,
+                user_input_provider=user_input_provider,
+            )
             _validate_phase_outputs(phase_run)
             _write_phase_status(phase_run, ok=True)
 
@@ -70,6 +86,9 @@ def create_run(
                 "prompt_file": str(item.prompt_file),
                 "context_file": str(item.context_file),
                 "command_file": str(item.command_file),
+                "stdout_file": str(item.stdout_file),
+                "stderr_file": str(item.stderr_file),
+                "needs_user_input_file": str(item.needs_user_input_file),
                 "command": item.command,
                 "prompt_stdin": item.prompt_stdin,
                 "expected_outputs": [str(path) for path in item.expected_outputs],
@@ -107,6 +126,9 @@ def _prepare_phase(
     prompt_file = phase_dir / "prompt.md"
     context_file = phase_dir / "context.json"
     command_file = phase_dir / "command.sh"
+    stdout_file = phase_dir / "stdout.txt"
+    stderr_file = phase_dir / "stderr.txt"
+    needs_user_input_file = phase_dir / "needs-user-input.md"
     expected_outputs = [_resolve_context_path(project_root, item) for item in phase.expected_outputs]
     command, prompt_stdin = _render_command(
         config.codex.command,
@@ -154,19 +176,129 @@ def _prepare_phase(
         prompt_file=prompt_file,
         context_file=context_file,
         command_file=command_file,
+        stdout_file=stdout_file,
+        stderr_file=stderr_file,
+        needs_user_input_file=needs_user_input_file,
         command=command,
         prompt_stdin=prompt_stdin,
         expected_outputs=expected_outputs,
     )
 
 
-def _execute_phase_command(phase_run: PhaseRun, *, cwd: Path) -> None:
+def _execute_phase_until_ready(
+    phase_run: PhaseRun,
+    *,
+    cwd: Path,
+    user_input_provider: UserInputProvider | None,
+) -> None:
+    while True:
+        output = _execute_phase_command(phase_run, cwd=cwd)
+        request = _detect_user_input_request(output)
+        if not request:
+            return
+        if user_input_provider is None:
+            _stop_for_user_input(phase_run, request)
+
+        phase_run.needs_user_input_file.write_text(request.strip() + "\n", encoding="utf-8")
+        answer = user_input_provider(phase_run, request)
+        if not answer.strip():
+            _stop_for_user_input(phase_run, request)
+        _record_user_input_answer(phase_run, request=request, answer=answer)
+
+
+def _execute_phase_command(phase_run: PhaseRun, *, cwd: Path) -> str:
     if phase_run.prompt_stdin:
         prompt = phase_run.prompt_file.read_text(encoding="utf-8")
-        subprocess.run(phase_run.command, cwd=cwd, input=prompt, text=True, check=True)
-        return
+        completed = subprocess.run(
+            phase_run.command,
+            cwd=cwd,
+            input=prompt,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    else:
+        completed = subprocess.run(phase_run.command, cwd=cwd, text=True, capture_output=True, check=False)
 
-    subprocess.run(phase_run.command, cwd=cwd, check=True)
+    phase_run.stdout_file.write_text(completed.stdout or "", encoding="utf-8")
+    phase_run.stderr_file.write_text(completed.stderr or "", encoding="utf-8")
+    completed.check_returncode()
+    return "\n".join(part for part in [completed.stdout, completed.stderr] if part)
+
+
+def _stop_for_user_input(phase_run: PhaseRun, request: str) -> None:
+    phase_run.needs_user_input_file.write_text(request.strip() + "\n", encoding="utf-8")
+    _write_phase_status(phase_run, ok=False, needs_user_input=True)
+    raise PhaseNeedsUserInputError(
+        "Phase "
+        f"'{phase_run.phase_id}' requested user input. Harness stopped before the next phase.\n"
+        f"Questions were written to: {phase_run.needs_user_input_file}\n"
+        f"Full stdout: {phase_run.stdout_file}\n"
+        f"Full stderr: {phase_run.stderr_file}"
+    )
+
+
+def _record_user_input_answer(phase_run: PhaseRun, *, request: str, answer: str) -> None:
+    phase_dir = phase_run.prompt_file.parent
+    answers_file = phase_dir / "user-answers.md"
+    existing = answers_file.read_text(encoding="utf-8") if answers_file.exists() else ""
+    round_number = existing.count("## Clarification Round") + 1
+    block = (
+        f"## Clarification Round {round_number}\n\n"
+        "### Codex Questions\n\n"
+        f"{request.strip()}\n\n"
+        "### User Answers\n\n"
+        f"{answer.strip()}\n"
+    )
+    answers_file.write_text((existing + "\n" if existing else "") + block + "\n", encoding="utf-8")
+
+    prompt = phase_run.prompt_file.read_text(encoding="utf-8").rstrip()
+    prompt += (
+        "\n\n补充用户回答：\n"
+        f"以下是第 {round_number} 轮用户对你上一轮问题的回答。请基于这些回答继续完成当前阶段；"
+        "如果仍然缺少关键决策，可以再次输出 HARNESS_NEEDS_USER_INPUT 并列出问题；"
+        "否则生成当前阶段要求的 artifact。\n\n"
+        f"{answer.strip()}\n"
+    )
+    phase_run.prompt_file.write_text(prompt + "\n", encoding="utf-8")
+    if phase_run.needs_user_input_file.exists():
+        phase_run.needs_user_input_file.unlink()
+
+
+def _detect_user_input_request(output: str) -> str | None:
+    text = output.strip()
+    if not text:
+        return None
+
+    marker = "HARNESS_NEEDS_USER_INPUT"
+    if marker in text:
+        return text[text.index(marker) :]
+
+    lowered = text.lower()
+    question_markers = [
+        "请确认",
+        "请你确认",
+        "请回答",
+        "请提供",
+        "需要你",
+        "需要您",
+        "需要用户",
+        "需要确认",
+        "需要补充",
+        "待你确认",
+        "待用户确认",
+        "有几个问题",
+        "以下问题",
+        "before i continue",
+        "before proceeding",
+        "please confirm",
+        "please provide",
+        "need your input",
+        "need clarification",
+    ]
+    if any(marker in lowered for marker in question_markers):
+        return text
+    return None
 
 
 def _validate_phase_outputs(phase_run: PhaseRun) -> None:
@@ -179,15 +311,25 @@ def _validate_phase_outputs(phase_run: PhaseRun) -> None:
         )
 
 
-def _write_phase_status(phase_run: PhaseRun, *, ok: bool, missing: list[Path] | None = None) -> None:
+def _write_phase_status(
+    phase_run: PhaseRun,
+    *,
+    ok: bool,
+    missing: list[Path] | None = None,
+    needs_user_input: bool = False,
+) -> None:
     status_file = phase_run.prompt_file.parent / "status.json"
     status_file.write_text(
         json.dumps(
             {
                 "phase_id": phase_run.phase_id,
                 "ok": ok,
+                "needs_user_input": needs_user_input,
+                "needs_user_input_file": str(phase_run.needs_user_input_file) if needs_user_input else None,
                 "expected_outputs": [str(path) for path in phase_run.expected_outputs],
                 "missing_outputs": [str(path) for path in missing or []],
+                "stdout_file": str(phase_run.stdout_file),
+                "stderr_file": str(phase_run.stderr_file),
             },
             indent=2,
             ensure_ascii=False,

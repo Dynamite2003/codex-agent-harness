@@ -8,7 +8,7 @@ from pathlib import Path
 
 from codex_harness.config import load_config, parse_config
 from codex_harness.python_bootstrap import bootstrap_python_project
-from codex_harness.runner import create_run
+from codex_harness.runner import PhaseNeedsUserInputError, create_run
 
 
 class HarnessTests(unittest.TestCase):
@@ -326,6 +326,168 @@ class HarnessTests(unittest.TestCase):
             self.assertTrue((root / "doc" / "prompt.md").exists())
             self.assertTrue(status["ok"])
             self.assertEqual(status["missing_outputs"], [])
+
+    def test_execute_stops_when_phase_requests_user_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_codex = (
+                "from pathlib import Path; "
+                "import sys; "
+                "phase=sys.argv[1]; "
+                "root=Path('{project_root}'); "
+                "doc=root/'doc'; "
+                "doc.mkdir(exist_ok=True); "
+                "\nif phase == 'requirements':\n"
+                "    (doc/'proposal.md').write_text('draft\\n', encoding='utf-8')\n"
+                "    print('HARNESS_NEEDS_USER_INPUT\\n1. 请确认目标平台。')\n"
+                "else:\n"
+                "    (doc/(phase + '.md')).write_text('should not run\\n', encoding='utf-8')\n"
+            )
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["python3", "-c", fake_codex, "{phase_id}"]},
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write docs.",
+                            "steps": "Ask.",
+                            "expected_outputs": ["doc/proposal.md"],
+                        },
+                        {
+                            "id": "design",
+                            "title": "Design",
+                            "goal": "Design.",
+                            "input": "Context.",
+                            "output": "Write design.",
+                            "steps": "Read.",
+                            "expected_outputs": ["doc/detailed-design.md"],
+                        },
+                        {
+                            "id": "tasks",
+                            "title": "Tasks",
+                            "goal": "Tasks.",
+                            "input": "Context.",
+                            "output": "Write tasks.",
+                            "steps": "Split.",
+                        },
+                        {
+                            "id": "implementation",
+                            "title": "Implementation",
+                            "goal": "Prompt.",
+                            "input": "Context.",
+                            "output": "Write prompt.",
+                            "steps": "Generate.",
+                        },
+                    ],
+                }
+            )
+
+            with self.assertRaises(PhaseNeedsUserInputError) as raised:
+                create_run(config=config, user_goal="Goal", project_root=root, execute=True)
+
+            self.assertIn("requested user input", str(raised.exception))
+            run_dir = next((root / ".harness" / "runs").iterdir())
+            phase_dir = run_dir / "requirements"
+            status = json.loads((phase_dir / "status.json").read_text(encoding="utf-8"))
+
+            self.assertTrue((phase_dir / "stdout.txt").exists())
+            self.assertTrue((phase_dir / "needs-user-input.md").exists())
+            self.assertTrue(status["needs_user_input"])
+            self.assertFalse((root / "doc" / "detailed-design.md").exists())
+
+    def test_execute_reads_user_input_and_resumes_same_phase(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_codex = (
+                "from pathlib import Path\n"
+                "import sys\n"
+                "phase=sys.argv[1]\n"
+                "prompt=sys.stdin.read()\n"
+                "root=Path('{project_root}')\n"
+                "doc=root/'doc'\n"
+                "doc.mkdir(exist_ok=True)\n"
+                "if phase == 'requirements' and '目标平台是 iOS' not in prompt:\n"
+                "    print('HARNESS_NEEDS_USER_INPUT\\n1. 请确认目标平台。')\n"
+                "elif phase == 'requirements':\n"
+                "    (doc/'proposal.md').write_text('proposal with iOS\\n', encoding='utf-8')\n"
+                "elif phase == 'design':\n"
+                "    (doc/'detailed-design.md').write_text('design\\n', encoding='utf-8')\n"
+                "elif phase == 'tasks':\n"
+                "    tasks=doc/'tasks'\n"
+                "    tasks.mkdir(exist_ok=True)\n"
+                "    (tasks/'core.md').write_text('- [x] core\\n', encoding='utf-8')\n"
+                "    (tasks/'progress.md').write_text('- [x] core\\n', encoding='utf-8')\n"
+                "elif phase == 'implementation':\n"
+                "    (doc/'prompt.md').write_text('prompt\\n', encoding='utf-8')\n"
+            )
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["python3", "-c", fake_codex, "{phase_id}", "{prompt_stdin}"]},
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write docs.",
+                            "steps": "Ask.",
+                            "expected_outputs": ["doc/proposal.md"],
+                        },
+                        {
+                            "id": "design",
+                            "title": "Design",
+                            "goal": "Design.",
+                            "input": "Context.",
+                            "output": "Write design.",
+                            "steps": "Read.",
+                            "expected_outputs": ["doc/detailed-design.md"],
+                        },
+                        {
+                            "id": "tasks",
+                            "title": "Tasks",
+                            "goal": "Tasks.",
+                            "input": "Context.",
+                            "output": "Write tasks.",
+                            "steps": "Split.",
+                            "expected_outputs": ["doc/tasks", "doc/tasks/progress.md"],
+                        },
+                        {
+                            "id": "implementation",
+                            "title": "Implementation",
+                            "goal": "Prompt.",
+                            "input": "Context.",
+                            "output": "Write prompt.",
+                            "steps": "Generate.",
+                            "expected_outputs": ["doc/prompt.md"],
+                        },
+                    ],
+                }
+            )
+            requests: list[str] = []
+
+            def answer(phase_run, request: str) -> str:
+                requests.append(phase_run.phase_id + ":" + request)
+                return "目标平台是 iOS"
+
+            run = create_run(config=config, user_goal="Goal", project_root=root, execute=True, user_input_provider=answer)
+            requirements_dir = run.run_dir / "requirements"
+            status = json.loads((requirements_dir / "status.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(len(requests), 1)
+            self.assertIn("requirements:HARNESS_NEEDS_USER_INPUT", requests[0])
+            self.assertFalse((requirements_dir / "needs-user-input.md").exists())
+            self.assertIn("目标平台是 iOS", (requirements_dir / "user-answers.md").read_text(encoding="utf-8"))
+            self.assertIn("目标平台是 iOS", run.phases[0].prompt_file.read_text(encoding="utf-8"))
+            self.assertTrue(status["ok"])
+            self.assertFalse(status["needs_user_input"])
+            self.assertTrue((root / "doc" / "prompt.md").exists())
 
     def test_python_bootstrap_writes_uv_tooling_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

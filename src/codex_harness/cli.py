@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .config import load_config
 from .python_bootstrap import bootstrap_python_project
-from .runner import create_run
+from .runner import PhaseNeedsUserInputError, PhaseRun, create_run
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -61,18 +61,43 @@ def _init(path: Path, *, force: bool) -> int:
 def _run(args: argparse.Namespace) -> int:
     config = load_config(Path(args.config).resolve())
     project_root = Path(args.project_root).resolve()
-    run = create_run(
-        config=config,
-        user_goal=args.goal,
-        project_root=project_root,
-        execute=args.execute,
-    )
+    try:
+        run = create_run(
+            config=config,
+            user_goal=args.goal,
+            project_root=project_root,
+            execute=args.execute,
+            user_input_provider=_read_user_input if args.execute else None,
+        )
+    except PhaseNeedsUserInputError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     print(f"Run created: {run.run_dir}")
     for phase in run.phases:
         print(f"- {phase.phase_id}: {phase.prompt_file}")
     if not args.execute:
         print("Dry run only. No project artifacts were generated. Re-run with --execute to call Codex CLI.")
     return 0
+
+
+def _read_user_input(phase_run: PhaseRun, request: str) -> str:
+    print(
+        "\n"
+        f"Phase '{phase_run.phase_id}' needs your input before continuing.\n"
+        f"Questions were written to: {phase_run.needs_user_input_file}\n"
+        "Questions:\n"
+        f"{request.strip()}\n\n"
+        "Enter your answer. Finish with a line containing only END.",
+        file=sys.stderr,
+    )
+    lines: list[str] = []
+    while True:
+        line = sys.stdin.readline()
+        if line == "":
+            return ""
+        if line.rstrip("\n") == "END":
+            return "".join(lines).strip()
+        lines.append(line)
 
 
 def _bootstrap_python(args: argparse.Namespace) -> int:
@@ -95,9 +120,11 @@ def _fallback_config() -> str:
     return """{
   "project_name": "local-project",
   "workspace": ".harness",
-  "codex": {"command": ["codex", "exec", "--sandbox", "workspace-write", "{prompt_stdin}"]},
+  "codex": {"command": ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "{prompt_stdin}"]},
   "isolation": {"new_conversation_per_phase": true, "artifact_only_context": true},
-  "global_constraints": [],
+  "global_constraints": [
+    "如果当前阶段需要用户回答才能继续，不要进入下一阶段所需的实质输出；最终回复必须包含独占一行的 HARNESS_NEEDS_USER_INPUT，并在其后列出需要用户回答的问题。harness 检测到该标记后会停止，不会继续后续阶段。"
+  ],
   "prompt_style": {"language": "zh-CN", "tone": "direct", "must_include": ["目标", "输入", "输出", "步骤"]},
   "phases": [
     {"id": "requirements", "title": "需求", "goal": "明确用户需求：{user_goal}", "input": "当前项目目录：{project_root}", "output": "请在 doc/proposal.md 生成需求文档。", "steps": "只做需求澄清，不做设计或实现。", "expected_outputs": ["doc/proposal.md"]},
