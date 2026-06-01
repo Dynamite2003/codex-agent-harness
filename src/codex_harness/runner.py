@@ -30,6 +30,10 @@ class PhaseNeedsUserInputError(RuntimeError):
     pass
 
 
+class PhaseOutputMissingError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class HarnessRun:
     run_id: str
@@ -38,6 +42,10 @@ class HarnessRun:
 
 
 UserInputProvider = Callable[[PhaseRun, str], str]
+OutputMissingProvider = Callable[[PhaseRun, list[Path]], str]
+FORCE_NEXT_PHASE = "__HARNESS_FORCE_NEXT_PHASE__"
+SKIP_PHASE = "__HARNESS_SKIP_PHASE__"
+STOP_RUN = "__HARNESS_STOP_RUN__"
 
 
 def create_run(
@@ -47,6 +55,7 @@ def create_run(
     project_root: Path,
     execute: bool = False,
     user_input_provider: UserInputProvider | None = None,
+    output_missing_provider: OutputMissingProvider | None = None,
 ) -> HarnessRun:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = project_root / config.workspace / "runs" / run_id
@@ -63,13 +72,12 @@ def create_run(
         )
         phase_runs.append(phase_run)
         if execute:
-            _execute_phase_until_ready(
+            _execute_phase_until_outputs_exist(
                 phase_run,
                 cwd=project_root,
                 user_input_provider=user_input_provider,
+                output_missing_provider=output_missing_provider,
             )
-            _validate_phase_outputs(phase_run)
-            _write_phase_status(phase_run, ok=True)
 
     manifest = {
         "run_id": run_id,
@@ -185,6 +193,36 @@ def _prepare_phase(
     )
 
 
+def _execute_phase_until_outputs_exist(
+    phase_run: PhaseRun,
+    *,
+    cwd: Path,
+    user_input_provider: UserInputProvider | None,
+    output_missing_provider: OutputMissingProvider | None,
+) -> None:
+    while True:
+        _execute_phase_until_ready(
+            phase_run,
+            cwd=cwd,
+            user_input_provider=user_input_provider,
+        )
+        missing = _missing_phase_outputs(phase_run)
+        if not missing:
+            _write_phase_status(phase_run, ok=True)
+            return
+        if output_missing_provider is None:
+            _stop_for_missing_outputs(phase_run, missing)
+
+        response = output_missing_provider(phase_run, missing)
+        if response == SKIP_PHASE:
+            _record_skip_phase(phase_run, missing=missing)
+            _write_phase_status(phase_run, ok=True, skipped=True, missing=missing)
+            return
+        if response == STOP_RUN or not response.strip():
+            _stop_for_missing_outputs(phase_run, missing)
+        _record_missing_output_retry(phase_run, missing=missing, instruction=response)
+
+
 def _execute_phase_until_ready(
     phase_run: PhaseRun,
     *,
@@ -201,6 +239,12 @@ def _execute_phase_until_ready(
 
         phase_run.needs_user_input_file.write_text(request.strip() + "\n", encoding="utf-8")
         answer = user_input_provider(phase_run, request)
+        if answer == FORCE_NEXT_PHASE or answer.startswith(FORCE_NEXT_PHASE + "\n"):
+            forced_answer = answer.removeprefix(FORCE_NEXT_PHASE).strip()
+            if forced_answer:
+                _record_user_input_answer(phase_run, request=request, answer=forced_answer)
+            _record_force_next_phase(phase_run, request=request, answer=forced_answer)
+            return
         if not answer.strip():
             _stop_for_user_input(phase_run, request)
         _record_user_input_answer(phase_run, request=request, answer=answer)
@@ -265,6 +309,65 @@ def _record_user_input_answer(phase_run: PhaseRun, *, request: str, answer: str)
         phase_run.needs_user_input_file.unlink()
 
 
+def _record_force_next_phase(phase_run: PhaseRun, *, request: str, answer: str = "") -> None:
+    phase_dir = phase_run.prompt_file.parent
+    override_file = phase_dir / "force-next-phase.md"
+    text = (
+        "当前阶段收到 Codex 继续反问，但用户选择强制进入下一阶段。\n\n"
+        "### Ignored Codex Questions\n\n"
+        f"{request.strip()}\n"
+    )
+    if answer.strip():
+        text += "\n### User Answers Recorded Before Force Next Phase\n\n" + answer.strip() + "\n"
+    override_file.write_text(text, encoding="utf-8")
+    if phase_run.needs_user_input_file.exists():
+        phase_run.needs_user_input_file.unlink()
+
+
+def _record_missing_output_retry(
+    phase_run: PhaseRun,
+    *,
+    missing: list[Path],
+    instruction: str,
+) -> None:
+    phase_dir = phase_run.prompt_file.parent
+    retry_file = phase_dir / "missing-output-retries.md"
+    existing = retry_file.read_text(encoding="utf-8") if retry_file.exists() else ""
+    round_number = existing.count("## Missing Output Retry") + 1
+    missing_text = "\n".join(f"- {path}" for path in missing)
+    block = (
+        f"## Missing Output Retry {round_number}\n\n"
+        "### Missing Outputs\n\n"
+        f"{missing_text}\n\n"
+        "### User Instruction\n\n"
+        f"{instruction.strip()}\n"
+    )
+    retry_file.write_text((existing + "\n" if existing else "") + block + "\n", encoding="utf-8")
+
+    prompt = phase_run.prompt_file.read_text(encoding="utf-8").rstrip()
+    prompt += (
+        "\n\n缺失产物修复指令：\n"
+        "你上一轮执行结束后，当前阶段要求的 artifact 缺失。请不要进入其他阶段，"
+        "只补齐当前阶段缺失的 artifact。\n\n"
+        "缺失文件：\n"
+        f"{missing_text}\n\n"
+        "用户补充指令：\n"
+        f"{instruction.strip()}\n"
+    )
+    phase_run.prompt_file.write_text(prompt + "\n", encoding="utf-8")
+
+
+def _record_skip_phase(phase_run: PhaseRun, *, missing: list[Path]) -> None:
+    skip_file = phase_run.prompt_file.parent / "skip-phase.md"
+    skip_file.write_text(
+        "当前阶段缺少声明产物，但用户选择强制跳过。\n\n"
+        "### Missing Outputs\n\n"
+        + "\n".join(f"- {path}" for path in missing)
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def _detect_user_input_request(output: str) -> str | None:
     text = output.strip()
     if not text:
@@ -302,13 +405,24 @@ def _detect_user_input_request(output: str) -> str | None:
 
 
 def _validate_phase_outputs(phase_run: PhaseRun) -> None:
-    missing = [path for path in phase_run.expected_outputs if not path.exists()]
+    missing = _missing_phase_outputs(phase_run)
     if missing:
-        _write_phase_status(phase_run, ok=False, missing=missing)
-        formatted = "\n".join(f"- {path}" for path in missing)
-        raise RuntimeError(
-            f"Phase '{phase_run.phase_id}' finished, but required output artifacts are missing:\n{formatted}"
-        )
+        _stop_for_missing_outputs(phase_run, missing)
+
+
+def _missing_phase_outputs(phase_run: PhaseRun) -> list[Path]:
+    return [path for path in phase_run.expected_outputs if not path.exists()]
+
+
+def _stop_for_missing_outputs(phase_run: PhaseRun, missing: list[Path]) -> None:
+    _write_phase_status(phase_run, ok=False, missing=missing)
+    formatted = "\n".join(f"- {path}" for path in missing)
+    raise PhaseOutputMissingError(
+        f"Phase '{phase_run.phase_id}' finished, but required output artifacts are missing:\n"
+        f"{formatted}\n"
+        f"Full stdout: {phase_run.stdout_file}\n"
+        f"Full stderr: {phase_run.stderr_file}"
+    )
 
 
 def _write_phase_status(
@@ -317,6 +431,7 @@ def _write_phase_status(
     ok: bool,
     missing: list[Path] | None = None,
     needs_user_input: bool = False,
+    skipped: bool = False,
 ) -> None:
     status_file = phase_run.prompt_file.parent / "status.json"
     status_file.write_text(
@@ -324,6 +439,7 @@ def _write_phase_status(
             {
                 "phase_id": phase_run.phase_id,
                 "ok": ok,
+                "skipped": skipped,
                 "needs_user_input": needs_user_input,
                 "needs_user_input_file": str(phase_run.needs_user_input_file) if needs_user_input else None,
                 "expected_outputs": [str(path) for path in phase_run.expected_outputs],

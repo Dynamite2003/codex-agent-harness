@@ -12,13 +12,33 @@
 
 ## 快速开始
 
+在本仓库里直接启动一个项目：
+
 ```bash
-uv venv
-uv sync --dev
-uv run codex-harness run --config examples/basic.harness.json --goal "给现有 Web 项目增加登录页"
+./harness -C /path/to/project "给现有 Web 项目增加登录页"
 ```
 
-默认是 dry-run，只生成 harness 审计文件，不调用 Codex CLI，也不会生成 `doc/` 下的阶段产物。生成内容位于：
+这会使用默认配置，真实执行四个阶段。`-C` 是目标项目目录；如果不传 `-C`，默认使用当前目录。
+
+只想预览每阶段 prompt，不调用 Codex：
+
+```bash
+./harness -C /path/to/project --dry-run "给现有 Web 项目增加登录页"
+```
+
+如果已经安装了包，也可以使用更短的入口：
+
+```bash
+harness -C /path/to/project "给现有 Web 项目增加登录页"
+```
+
+默认配置查找顺序：
+
+- 目标项目下的 `harness.json`
+- 本仓库的 `examples/basic.harness.json`
+- 自动生成的 `.harness/default.harness.json`
+
+dry-run 只生成 harness 审计文件，不调用 Codex CLI，也不会生成 `doc/` 下的阶段产物。生成内容位于：
 
 ```text
 .harness/runs/<run-id>/
@@ -40,10 +60,35 @@ uv run codex-harness run --config examples/basic.harness.json --goal "给现有 
 - `tasks`：基于需求和详细设计生成模块任务文件 `doc/tasks/<module-name>.md`，并维护总体进度 `doc/tasks/progress.md`。
 - `implementation`：生成监督 Agent 使用的 Vibe Coding 起始 prompt `doc/prompt.md`，由监督 Agent 根据 `doc/tasks/progress.md` 自动拉起子 agents 完成实现和验证。
 
-确认 prompt 后再执行：
+## 轻量 Prompt Skills
+
+完整 harness 会让四个阶段分别启动 Codex，并把上下文、prompt、stdout/stderr 和阶段产物全部落盘，适合需要审计、可恢复、多人协作或严格产物校验的开发流程。早期创意探索只想把一句话扩展成某个阶段的完整 prompt 时，可以直接使用仓库内置的轻量 skills，避免完整四阶段执行带来的额外 token 开销。
+
+安装到本机 Codex skills 目录：
 
 ```bash
-uv run codex-harness run --config examples/basic.harness.json --goal "..." --execute
+cp -R skills/expand-* "${CODEX_HOME:-$HOME/.codex}/skills/"
+```
+
+可用 skills：
+
+- `$expand-requirements-prompt`：把一句产品想法扩展成需求阶段 prompt，目标产物为 `doc/proposal.md`。
+- `$expand-design-prompt`：把需求文档扩展成详细设计阶段 prompt，目标产物为 `doc/detailed-design.md`。
+- `$expand-tasks-prompt`：把需求和设计扩展成任务拆分 prompt，目标产物为 `doc/tasks/`。
+- `$expand-implementation-prompt`：把规划 artifacts 扩展成实现执行 prompt，用于监督 agent 按任务清单编码、测试和更新进度。
+
+示例：
+
+```text
+$expand-requirements-prompt 我想做一个 AI 考试比赛时间轴提醒 Web 应用
+```
+
+这些 skills 只生成可复制的阶段 prompt，不会自动运行 harness、创建项目或修改业务代码。需要完整 artifact 链、阶段审计和自动校验时，再使用 `./harness -C /path/to/project "..."`。
+
+高级用法仍然可以显式指定配置：
+
+```bash
+codex-harness run --config examples/basic.harness.json --project-root /path/to/project --goal "..." --execute
 ```
 
 执行模式会真实调用 Codex CLI，并按阶段检查目标项目中的产物：
@@ -55,12 +100,15 @@ uv run codex-harness run --config examples/basic.harness.json --goal "..." --exe
 
 如果某个阶段完成后缺少声明的产物，harness 会失败并在该阶段目录写入 `status.json`。
 
-如果 Codex 在某个阶段输出 `HARNESS_NEEDS_USER_INPUT` 或明确要求用户确认/补充信息，执行模式会在同一个进程中暂停当前阶段，打印问题并等待你输入回答。输入多行回答后，用单独一行 `END` 提交；harness 会把回答记录到 `user-answers.md`，追加到当前阶段 `prompt.md`，重新执行同一阶段。只有当前阶段不再请求补充且产物校验通过后，才会进入下一阶段。如果 stdin 已关闭或回答为空，harness 会停止，并在该阶段目录写入 `needs-user-input.md` 和 `status.json`。
+如果 Codex 在某个阶段输出 `HARNESS_NEEDS_USER_INPUT` 或明确要求用户确认/补充信息，执行模式会在同一个进程中暂停当前阶段，打印问题并等待你输入回答。输入多行回答后，用单独一行 `END` 提交；harness 会把回答记录到 `user-answers.md`，追加到当前阶段 `prompt.md`，重新执行同一阶段。只有当前阶段不再请求补充且产物校验通过后，才会进入下一阶段。
 
-本地未安装包时也可以直接运行：
+如果 Codex 反复追问但你认为当前阶段产物已经足够，可以输入单独一行 `NEXT_PHASE`。如果你在 `NEXT_PHASE` 前已经输入了回答，harness 会先把这些回答记录到 `user-answers.md`，再校验当前阶段声明的产物；产物存在则进入下一阶段，同时写入 `force-next-phase.md` 作为审计记录。
+
+如果某阶段结束后缺少声明产物，例如 design 阶段没有生成 `doc/detailed-design.md`，harness 不会打印 Python traceback，而是会暂停并列出缺失文件。你可以输入补充指令并用 `END` 提交，harness 会把指令追加到当前阶段 prompt 并重跑该阶段；也可以输入 `SKIP_PHASE` 强制跳过并写入 `skip-phase.md`；输入 `STOP` 则停止。产物缺失时默认不会空跳阶段。
+
+本地开发时运行测试：
 
 ```bash
-PYTHONPATH=src python3 -m codex_harness.cli run --config examples/basic.harness.json --goal "..."
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 

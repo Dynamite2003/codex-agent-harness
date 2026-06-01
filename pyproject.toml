@@ -21,6 +21,7 @@ dev = [
 
 [project.scripts]
 codex-harness = "codex_harness.cli:main"
+harness = "codex_harness.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

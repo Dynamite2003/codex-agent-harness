@@ -6,12 +6,43 @@ import tomllib
 import unittest
 from pathlib import Path
 
+from codex_harness.cli import main
 from codex_harness.config import load_config, parse_config
 from codex_harness.python_bootstrap import bootstrap_python_project
-from codex_harness.runner import PhaseNeedsUserInputError, create_run
+from codex_harness.runner import (
+    FORCE_NEXT_PHASE,
+    SKIP_PHASE,
+    PhaseNeedsUserInputError,
+    PhaseOutputMissingError,
+    create_run,
+)
 
 
 class HarnessTests(unittest.TestCase):
+    def test_start_uses_default_config_and_current_style_args(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            result = main(["start", "-C", str(root), "--dry-run", "Build a feature."])
+
+            self.assertEqual(result, 0)
+            runs_dir = root / ".harness" / "runs"
+            run_dir = next(runs_dir.iterdir())
+            self.assertTrue((run_dir / "requirements" / "prompt.md").exists())
+            self.assertIn(
+                "Build a feature.",
+                (run_dir / "requirements" / "prompt.md").read_text(encoding="utf-8"),
+            )
+
+    def test_goal_without_subcommand_defaults_to_start(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            result = main(["-C", str(root), "--dry-run", "Build a feature."])
+
+            self.assertEqual(result, 0)
+            self.assertTrue((root / ".harness" / "runs").exists())
+
     def test_create_run_writes_phase_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -487,6 +518,359 @@ class HarnessTests(unittest.TestCase):
             self.assertIn("目标平台是 iOS", run.phases[0].prompt_file.read_text(encoding="utf-8"))
             self.assertTrue(status["ok"])
             self.assertFalse(status["needs_user_input"])
+            self.assertTrue((root / "doc" / "prompt.md").exists())
+
+    def test_execute_can_force_next_phase_after_repeated_questions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_codex = (
+                "from pathlib import Path\n"
+                "import sys\n"
+                "phase=sys.argv[1]\n"
+                "root=Path('{project_root}')\n"
+                "doc=root/'doc'\n"
+                "doc.mkdir(exist_ok=True)\n"
+                "if phase == 'requirements':\n"
+                "    (doc/'proposal.md').write_text('proposal draft\\n', encoding='utf-8')\n"
+                "    print('HARNESS_NEEDS_USER_INPUT\\n1. 还要继续确认吗？')\n"
+                "elif phase == 'design':\n"
+                "    (doc/'detailed-design.md').write_text('design\\n', encoding='utf-8')\n"
+                "elif phase == 'tasks':\n"
+                "    tasks=doc/'tasks'\n"
+                "    tasks.mkdir(exist_ok=True)\n"
+                "    (tasks/'core.md').write_text('- [x] core\\n', encoding='utf-8')\n"
+                "    (tasks/'progress.md').write_text('- [x] core\\n', encoding='utf-8')\n"
+                "elif phase == 'implementation':\n"
+                "    (doc/'prompt.md').write_text('prompt\\n', encoding='utf-8')\n"
+            )
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["python3", "-c", fake_codex, "{phase_id}"]},
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write docs.",
+                            "steps": "Ask.",
+                            "expected_outputs": ["doc/proposal.md"],
+                        },
+                        {
+                            "id": "design",
+                            "title": "Design",
+                            "goal": "Design.",
+                            "input": "Context.",
+                            "output": "Write design.",
+                            "steps": "Read.",
+                            "expected_outputs": ["doc/detailed-design.md"],
+                        },
+                        {
+                            "id": "tasks",
+                            "title": "Tasks",
+                            "goal": "Tasks.",
+                            "input": "Context.",
+                            "output": "Write tasks.",
+                            "steps": "Split.",
+                            "expected_outputs": ["doc/tasks", "doc/tasks/progress.md"],
+                        },
+                        {
+                            "id": "implementation",
+                            "title": "Implementation",
+                            "goal": "Prompt.",
+                            "input": "Context.",
+                            "output": "Write prompt.",
+                            "steps": "Generate.",
+                            "expected_outputs": ["doc/prompt.md"],
+                        },
+                    ],
+                }
+            )
+
+            run = create_run(
+                config=config,
+                user_goal="Goal",
+                project_root=root,
+                execute=True,
+                user_input_provider=lambda _phase_run, _request: FORCE_NEXT_PHASE,
+            )
+            requirements_dir = run.run_dir / "requirements"
+            status = json.loads((requirements_dir / "status.json").read_text(encoding="utf-8"))
+
+            self.assertTrue(status["ok"])
+            self.assertFalse(status["needs_user_input"])
+            self.assertTrue((requirements_dir / "force-next-phase.md").exists())
+            self.assertFalse((requirements_dir / "needs-user-input.md").exists())
+            self.assertTrue((root / "doc" / "prompt.md").exists())
+
+    def test_force_next_phase_preserves_typed_answer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_codex = (
+                "from pathlib import Path\n"
+                "import sys\n"
+                "phase=sys.argv[1]\n"
+                "root=Path('{project_root}')\n"
+                "doc=root/'doc'\n"
+                "doc.mkdir(exist_ok=True)\n"
+                "if phase == 'requirements':\n"
+                "    (doc/'proposal.md').write_text('proposal draft\\n', encoding='utf-8')\n"
+                "    print('HARNESS_NEEDS_USER_INPUT\\n1. 请确认。')\n"
+                "elif phase == 'design':\n"
+                "    (doc/'detailed-design.md').write_text('design\\n', encoding='utf-8')\n"
+                "elif phase == 'tasks':\n"
+                "    tasks=doc/'tasks'\n"
+                "    tasks.mkdir(exist_ok=True)\n"
+                "    (tasks/'progress.md').write_text('- [x] core\\n', encoding='utf-8')\n"
+                "elif phase == 'implementation':\n"
+                "    (doc/'prompt.md').write_text('prompt\\n', encoding='utf-8')\n"
+            )
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["python3", "-c", fake_codex, "{phase_id}"]},
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write docs.",
+                            "steps": "Ask.",
+                            "expected_outputs": ["doc/proposal.md"],
+                        },
+                        {
+                            "id": "design",
+                            "title": "Design",
+                            "goal": "Design.",
+                            "input": "Context.",
+                            "output": "Write design.",
+                            "steps": "Read.",
+                            "expected_outputs": ["doc/detailed-design.md"],
+                        },
+                        {
+                            "id": "tasks",
+                            "title": "Tasks",
+                            "goal": "Tasks.",
+                            "input": "Context.",
+                            "output": "Write tasks.",
+                            "steps": "Split.",
+                            "expected_outputs": ["doc/tasks", "doc/tasks/progress.md"],
+                        },
+                        {
+                            "id": "implementation",
+                            "title": "Implementation",
+                            "goal": "Prompt.",
+                            "input": "Context.",
+                            "output": "Write prompt.",
+                            "steps": "Generate.",
+                            "expected_outputs": ["doc/prompt.md"],
+                        },
+                    ],
+                }
+            )
+
+            run = create_run(
+                config=config,
+                user_goal="Goal",
+                project_root=root,
+                execute=True,
+                user_input_provider=lambda _phase_run, _request: FORCE_NEXT_PHASE + "\n用户已经回答的内容",
+            )
+            requirements_dir = run.run_dir / "requirements"
+
+            self.assertIn("用户已经回答的内容", (requirements_dir / "user-answers.md").read_text(encoding="utf-8"))
+            self.assertIn(
+                "用户已经回答的内容",
+                (requirements_dir / "force-next-phase.md").read_text(encoding="utf-8"),
+            )
+
+    def test_missing_outputs_can_be_retried_interactively(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_codex = (
+                "from pathlib import Path\n"
+                "import sys\n"
+                "phase=sys.argv[1]\n"
+                "prompt=sys.stdin.read()\n"
+                "root=Path('{project_root}')\n"
+                "doc=root/'doc'\n"
+                "doc.mkdir(exist_ok=True)\n"
+                "if phase == 'requirements':\n"
+                "    (doc/'proposal.md').write_text('proposal\\n', encoding='utf-8')\n"
+                "elif phase == 'design' and '请补齐详细设计文档' in prompt:\n"
+                "    (doc/'detailed-design.md').write_text('design\\n', encoding='utf-8')\n"
+                "elif phase == 'tasks':\n"
+                "    tasks=doc/'tasks'\n"
+                "    tasks.mkdir(exist_ok=True)\n"
+                "    (tasks/'progress.md').write_text('- [x] core\\n', encoding='utf-8')\n"
+                "elif phase == 'implementation':\n"
+                "    (doc/'prompt.md').write_text('prompt\\n', encoding='utf-8')\n"
+            )
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["python3", "-c", fake_codex, "{phase_id}", "{prompt_stdin}"]},
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write docs.",
+                            "steps": "Ask.",
+                            "expected_outputs": ["doc/proposal.md"],
+                        },
+                        {
+                            "id": "design",
+                            "title": "Design",
+                            "goal": "Design.",
+                            "input": "Context.",
+                            "output": "Write design.",
+                            "steps": "Read.",
+                            "expected_outputs": ["doc/detailed-design.md"],
+                        },
+                        {
+                            "id": "tasks",
+                            "title": "Tasks",
+                            "goal": "Tasks.",
+                            "input": "Context.",
+                            "output": "Write tasks.",
+                            "steps": "Split.",
+                            "expected_outputs": ["doc/tasks", "doc/tasks/progress.md"],
+                        },
+                        {
+                            "id": "implementation",
+                            "title": "Implementation",
+                            "goal": "Prompt.",
+                            "input": "Context.",
+                            "output": "Write prompt.",
+                            "steps": "Generate.",
+                            "expected_outputs": ["doc/prompt.md"],
+                        },
+                    ],
+                }
+            )
+
+            run = create_run(
+                config=config,
+                user_goal="Goal",
+                project_root=root,
+                execute=True,
+                output_missing_provider=lambda _phase_run, _missing: "请补齐详细设计文档",
+            )
+
+            self.assertTrue((root / "doc" / "detailed-design.md").exists())
+            self.assertTrue((run.run_dir / "design" / "missing-output-retries.md").exists())
+
+    def test_missing_outputs_can_be_stopped_without_traceback_error_type(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["python3", "-c", "print('done')"]},
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write docs.",
+                            "steps": "Ask.",
+                            "expected_outputs": ["doc/proposal.md"],
+                        },
+                        {"id": "design", "title": "Design", "goal": "Design.", "input": "Context.", "output": "Write design.", "steps": "Read."},
+                        {"id": "tasks", "title": "Tasks", "goal": "Tasks.", "input": "Context.", "output": "Write tasks.", "steps": "Split."},
+                        {"id": "implementation", "title": "Implementation", "goal": "Prompt.", "input": "Context.", "output": "Write prompt.", "steps": "Generate."},
+                    ],
+                }
+            )
+
+            with self.assertRaises(PhaseOutputMissingError):
+                create_run(config=config, user_goal="Goal", project_root=root, execute=True)
+
+    def test_missing_outputs_can_be_skipped_with_audit_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_codex = (
+                "from pathlib import Path\n"
+                "import sys\n"
+                "phase=sys.argv[1]\n"
+                "root=Path('{project_root}')\n"
+                "doc=root/'doc'\n"
+                "doc.mkdir(exist_ok=True)\n"
+                "if phase == 'requirements':\n"
+                "    (doc/'proposal.md').write_text('proposal\\n', encoding='utf-8')\n"
+                "elif phase == 'tasks':\n"
+                "    tasks=doc/'tasks'\n"
+                "    tasks.mkdir(exist_ok=True)\n"
+                "    (tasks/'progress.md').write_text('- [x] core\\n', encoding='utf-8')\n"
+                "elif phase == 'implementation':\n"
+                "    (doc/'prompt.md').write_text('prompt\\n', encoding='utf-8')\n"
+            )
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["python3", "-c", fake_codex, "{phase_id}"]},
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write docs.",
+                            "steps": "Ask.",
+                            "expected_outputs": ["doc/proposal.md"],
+                        },
+                        {
+                            "id": "design",
+                            "title": "Design",
+                            "goal": "Design.",
+                            "input": "Context.",
+                            "output": "Write design.",
+                            "steps": "Read.",
+                            "expected_outputs": ["doc/detailed-design.md"],
+                        },
+                        {
+                            "id": "tasks",
+                            "title": "Tasks",
+                            "goal": "Tasks.",
+                            "input": "Context.",
+                            "output": "Write tasks.",
+                            "steps": "Split.",
+                            "expected_outputs": ["doc/tasks", "doc/tasks/progress.md"],
+                        },
+                        {
+                            "id": "implementation",
+                            "title": "Implementation",
+                            "goal": "Prompt.",
+                            "input": "Context.",
+                            "output": "Write prompt.",
+                            "steps": "Generate.",
+                            "expected_outputs": ["doc/prompt.md"],
+                        },
+                    ],
+                }
+            )
+
+            run = create_run(
+                config=config,
+                user_goal="Goal",
+                project_root=root,
+                execute=True,
+                output_missing_provider=lambda _phase_run, _missing: SKIP_PHASE,
+            )
+            design_status = json.loads((run.run_dir / "design" / "status.json").read_text(encoding="utf-8"))
+
+            self.assertTrue(design_status["skipped"])
+            self.assertTrue((run.run_dir / "design" / "skip-phase.md").exists())
             self.assertTrue((root / "doc" / "prompt.md").exists())
 
     def test_python_bootstrap_writes_uv_tooling_config(self) -> None:
