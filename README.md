@@ -35,8 +35,10 @@ harness -C /path/to/project "给现有 Web 项目增加登录页"
 默认配置查找顺序：
 
 - 目标项目下的 `harness.json`
-- 本仓库的 `examples/basic.harness.json`
 - 自动生成的 `.harness/default.harness.json`
+
+自动生成的默认配置来自包内 `codex_harness/default.harness.json`。仓库里的
+[examples/basic.harness.json](examples/basic.harness.json) 是同一份配置的可读示例，测试会校验两者保持一致。
 
 dry-run 只生成 harness 审计文件，不调用 Codex CLI，也不会生成 `doc/` 下的阶段产物。生成内容位于：
 
@@ -100,6 +102,9 @@ codex-harness run --config examples/basic.harness.json --project-root /path/to/p
 
 如果某个阶段完成后缺少声明的产物，harness 会失败并在该阶段目录写入 `status.json`。
 
+如果 Codex CLI 命令本身返回非零退出码，harness 不会直接打印 Python traceback，而是会在当前阶段写入
+`status.json`，标记 `command_failed` 和 `returncode`，并提示查看该阶段的 `stdout.txt` / `stderr.txt`。
+
 如果 Codex 在某个阶段输出 `HARNESS_NEEDS_USER_INPUT` 或明确要求用户确认/补充信息，执行模式会在同一个进程中暂停当前阶段，打印问题并等待你输入回答。输入多行回答后，用单独一行 `END` 提交；harness 会把回答记录到 `user-answers.md`，追加到当前阶段 `prompt.md`，重新执行同一阶段。只有当前阶段不再请求补充且产物校验通过后，才会进入下一阶段。
 
 如果 Codex 反复追问但你认为当前阶段产物已经足够，可以输入单独一行 `NEXT_PHASE`。如果你在 `NEXT_PHASE` 前已经输入了回答，harness 会先把这些回答记录到 `user-answers.md`，再校验当前阶段声明的产物；产物存在则进入下一阶段，同时写入 `force-next-phase.md` 作为审计记录。
@@ -110,6 +115,22 @@ codex-harness run --config examples/basic.harness.json --project-root /path/to/p
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
+```
+
+安装开发依赖后可以使用统一入口：
+
+```bash
+python3 -m pip install -e ".[dev]"
+make check
+```
+
+`make check` 会依次运行单元测试、ruff 和 mypy。仓库也包含 GitHub Actions CI，会在 `main` push 和 PR 上运行同一套检查。
+
+清理旧的 harness 审计运行目录：
+
+```bash
+./harness clean-runs -C /path/to/project --keep 10
+./harness clean-runs -C /path/to/project --keep 10 --dry-run
 ```
 
 ## Python 项目启动

@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import shlex
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
 
 from .config import HarnessConfig, Phase
 from .prompting import build_prompt
@@ -34,6 +34,10 @@ class PhaseOutputMissingError(RuntimeError):
     pass
 
 
+class PhaseCommandFailedError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class HarnessRun:
     run_id: str
@@ -57,9 +61,7 @@ def create_run(
     user_input_provider: UserInputProvider | None = None,
     output_missing_provider: OutputMissingProvider | None = None,
 ) -> HarnessRun:
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = project_root / config.workspace / "runs" / run_id
-    run_dir.mkdir(parents=True, exist_ok=False)
+    run_id, run_dir = _create_unique_run_dir(project_root / config.workspace / "runs")
 
     phase_runs: list[PhaseRun] = []
     for phase in config.phases:
@@ -71,6 +73,14 @@ def create_run(
             run_dir=run_dir,
         )
         phase_runs.append(phase_run)
+        _write_run_manifest(
+            run_dir=run_dir,
+            run_id=run_id,
+            config=config,
+            project_root=project_root,
+            user_goal=user_goal,
+            phase_runs=phase_runs,
+        )
         if execute:
             _execute_phase_until_outputs_exist(
                 phase_run,
@@ -78,7 +88,49 @@ def create_run(
                 user_input_provider=user_input_provider,
                 output_missing_provider=output_missing_provider,
             )
+            _write_run_manifest(
+                run_dir=run_dir,
+                run_id=run_id,
+                config=config,
+                project_root=project_root,
+                user_goal=user_goal,
+                phase_runs=phase_runs,
+            )
 
+    _write_run_manifest(
+        run_dir=run_dir,
+        run_id=run_id,
+        config=config,
+        project_root=project_root,
+        user_goal=user_goal,
+        phase_runs=phase_runs,
+    )
+
+    return HarnessRun(run_id=run_id, run_dir=run_dir, phases=phase_runs)
+
+
+def _create_unique_run_dir(runs_root: Path) -> tuple[str, Path]:
+    for attempt in range(100):
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        run_id = timestamp if attempt == 0 else f"{timestamp}-{attempt}"
+        run_dir = runs_root / run_id
+        try:
+            run_dir.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            continue
+        return run_id, run_dir
+    raise RuntimeError(f"Unable to create a unique run directory under {runs_root}")
+
+
+def _write_run_manifest(
+    *,
+    run_dir: Path,
+    run_id: str,
+    config: HarnessConfig,
+    project_root: Path,
+    user_goal: str,
+    phase_runs: list[PhaseRun],
+) -> None:
     manifest = {
         "run_id": run_id,
         "project_name": config.project_name,
@@ -104,9 +156,10 @@ def create_run(
             for item in phase_runs
         ],
     }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-
-    return HarnessRun(run_id=run_id, run_dir=run_dir, phases=phase_runs)
+    (run_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _prepare_phase(
@@ -213,6 +266,7 @@ def _execute_phase_until_outputs_exist(
         if output_missing_provider is None:
             _stop_for_missing_outputs(phase_run, missing)
 
+        assert output_missing_provider is not None
         response = output_missing_provider(phase_run, missing)
         if response == SKIP_PHASE:
             _record_skip_phase(phase_run, missing=missing)
@@ -237,6 +291,7 @@ def _execute_phase_until_ready(
         if user_input_provider is None:
             _stop_for_user_input(phase_run, request)
 
+        assert user_input_provider is not None
         phase_run.needs_user_input_file.write_text(request.strip() + "\n", encoding="utf-8")
         answer = user_input_provider(phase_run, request)
         if answer == FORCE_NEXT_PHASE or answer.startswith(FORCE_NEXT_PHASE + "\n"):
@@ -266,7 +321,8 @@ def _execute_phase_command(phase_run: PhaseRun, *, cwd: Path) -> str:
 
     phase_run.stdout_file.write_text(completed.stdout or "", encoding="utf-8")
     phase_run.stderr_file.write_text(completed.stderr or "", encoding="utf-8")
-    completed.check_returncode()
+    if completed.returncode != 0:
+        _stop_for_command_failure(phase_run, returncode=completed.returncode)
     return "\n".join(part for part in [completed.stdout, completed.stderr] if part)
 
 
@@ -277,6 +333,15 @@ def _stop_for_user_input(phase_run: PhaseRun, request: str) -> None:
         "Phase "
         f"'{phase_run.phase_id}' requested user input. Harness stopped before the next phase.\n"
         f"Questions were written to: {phase_run.needs_user_input_file}\n"
+        f"Full stdout: {phase_run.stdout_file}\n"
+        f"Full stderr: {phase_run.stderr_file}"
+    )
+
+
+def _stop_for_command_failure(phase_run: PhaseRun, *, returncode: int) -> None:
+    _write_phase_status(phase_run, ok=False, command_failed=True, returncode=returncode)
+    raise PhaseCommandFailedError(
+        f"Phase '{phase_run.phase_id}' command failed with exit code {returncode}.\n"
         f"Full stdout: {phase_run.stdout_file}\n"
         f"Full stderr: {phase_run.stderr_file}"
     )
@@ -432,6 +497,8 @@ def _write_phase_status(
     missing: list[Path] | None = None,
     needs_user_input: bool = False,
     skipped: bool = False,
+    command_failed: bool = False,
+    returncode: int | None = None,
 ) -> None:
     status_file = phase_run.prompt_file.parent / "status.json"
     status_file.write_text(
@@ -441,6 +508,8 @@ def _write_phase_status(
                 "ok": ok,
                 "skipped": skipped,
                 "needs_user_input": needs_user_input,
+                "command_failed": command_failed,
+                "returncode": returncode,
                 "needs_user_input_file": str(phase_run.needs_user_input_file) if needs_user_input else None,
                 "expected_outputs": [str(path) for path in phase_run.expected_outputs],
                 "missing_outputs": [str(path) for path in missing or []],

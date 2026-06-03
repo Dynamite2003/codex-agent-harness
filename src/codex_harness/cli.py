@@ -6,11 +6,13 @@ import sys
 from pathlib import Path
 
 from .config import load_config
+from .defaults import default_config_text
 from .python_bootstrap import bootstrap_python_project
 from .runner import (
     FORCE_NEXT_PHASE,
     SKIP_PHASE,
     STOP_RUN,
+    PhaseCommandFailedError,
     PhaseNeedsUserInputError,
     PhaseOutputMissingError,
     PhaseRun,
@@ -44,6 +46,12 @@ def main(argv: list[str] | None = None) -> int:
     bootstrap_parser.add_argument("--package-name", help="Python package directory name")
     bootstrap_parser.add_argument("--execute", action="store_true", help="run uv venv and install dev dependencies")
 
+    clean_parser = subparsers.add_parser("clean-runs", help="remove old harness run directories")
+    clean_parser.add_argument("-C", "--project-root", default=".", help="target project root")
+    clean_parser.add_argument("--workspace", default=".harness", help="harness workspace directory")
+    clean_parser.add_argument("--keep", type=int, default=10, help="number of newest runs to keep")
+    clean_parser.add_argument("--dry-run", action="store_true", help="print runs that would be removed")
+
     args = parser.parse_args(argv)
 
     if args.command == "init":
@@ -54,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
         return _start(args)
     if args.command == "bootstrap-python":
         return _bootstrap_python(args)
+    if args.command == "clean-runs":
+        return _clean_runs(args)
 
     parser.error(f"Unknown command: {args.command}")
     return 2
@@ -64,7 +74,7 @@ def _normalize_argv(argv: list[str] | None) -> list[str] | None:
         argv = sys.argv[1:]
     if not argv:
         return argv
-    known_commands = {"init", "run", "start", "bootstrap-python", "-h", "--help"}
+    known_commands = {"init", "run", "start", "bootstrap-python", "clean-runs", "-h", "--help"}
     if argv[0] in known_commands:
         return argv
     return ["start", *argv]
@@ -76,11 +86,8 @@ def _init(path: Path, *, force: bool) -> int:
         print(f"Refusing to overwrite existing config: {target}", file=sys.stderr)
         return 1
 
-    example = Path(__file__).resolve().parents[2] / "examples" / "basic.harness.json"
-    if example.exists():
-        shutil.copyfile(example, target)
-    else:
-        target.write_text(_fallback_config(), encoding="utf-8")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(default_config_text(), encoding="utf-8")
 
     print(f"Created {target}")
     return 0
@@ -102,12 +109,10 @@ def _default_config_path(project_root: Path) -> Path:
     project_config = project_root / "harness.json"
     if project_config.exists():
         return project_config
-    repo_config = Path(__file__).resolve().parents[2] / "examples" / "basic.harness.json"
-    if repo_config.exists():
-        return repo_config
     fallback_config = project_root / ".harness" / "default.harness.json"
-    fallback_config.parent.mkdir(parents=True, exist_ok=True)
-    fallback_config.write_text(_fallback_config(), encoding="utf-8")
+    if not fallback_config.exists():
+        fallback_config.parent.mkdir(parents=True, exist_ok=True)
+        fallback_config.write_text(default_config_text(), encoding="utf-8")
     return fallback_config
 
 
@@ -127,6 +132,9 @@ def _run(args: argparse.Namespace) -> int:
         print(str(error), file=sys.stderr)
         return 1
     except PhaseOutputMissingError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    except PhaseCommandFailedError as error:
         print(str(error), file=sys.stderr)
         return 1
     print(f"Run created: {run.run_dir}")
@@ -204,24 +212,29 @@ def _bootstrap_python(args: argparse.Namespace) -> int:
     return 0
 
 
-def _fallback_config() -> str:
-    return """{
-  "project_name": "local-project",
-  "workspace": ".harness",
-  "codex": {"command": ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "{prompt_stdin}"]},
-  "isolation": {"new_conversation_per_phase": true, "artifact_only_context": true},
-  "global_constraints": [
-    "如果当前阶段需要用户回答才能继续，不要进入下一阶段所需的实质输出；最终回复必须包含独占一行的 HARNESS_NEEDS_USER_INPUT，并在其后列出需要用户回答的问题。harness 检测到该标记后会停止，不会继续后续阶段。"
-  ],
-  "prompt_style": {"language": "zh-CN", "tone": "direct", "must_include": ["目标", "输入", "输出", "步骤"]},
-  "phases": [
-    {"id": "requirements", "title": "需求", "goal": "明确用户需求：{user_goal}", "input": "当前项目目录：{project_root}", "output": "请在 doc/proposal.md 生成需求文档。", "steps": "只做需求澄清，不做设计或实现。", "expected_outputs": ["doc/proposal.md"]},
-    {"id": "design", "title": "设计", "goal": "根据需求文档生成详细设计文档。", "input": "需求文档 doc/proposal.md。\\n当前解析到的需求文档：\\n{context_files}", "output": "设计文档 doc/detailed-design.md。", "steps": "根据需求文档的内容，划分出模块，识别模块之间的关系，生成详细设计文档。不要猜测我的意图，任何不明确的地方向我询问。", "context_inputs": ["doc/proposal.md"], "expected_outputs": ["doc/detailed-design.md"]},
-    {"id": "tasks", "title": "任务", "goal": "为每一个模块划分最小可执行的任务。", "input": "需求文档：doc/proposal.md；设计文档：doc/detailed-design.md。\\n当前解析到的输入文档：\\n{context_files}", "output": "任务列表：\\n- doc/tasks/<module-name>.md（每一个模块对应一个）。\\n- doc/tasks/progress.md（总体进度）。", "steps": "根据需求文档和详细设计，为每一个模块生成 vibe coding 的最小任务。每一个模块对应一个 <module-name>.md，用 checklist 表示子任务是否完成。在 progress.md 中用 checklist 表示模块是否完成。", "context_inputs": ["doc/proposal.md", "doc/detailed-design.md"], "expected_outputs": ["doc/tasks", "doc/tasks/progress.md"]},
-    {"id": "implementation", "title": "实现", "goal": "生成 Vibe Coding 用的 prompt。", "input": "需求文档 doc/proposal.md；详细设计：doc/detailed-design.md；任务划分：doc/tasks。\\n当前解析到的输入：\\n{context_files}", "output": "doc/prompt.md。", "steps": "阅读输入信息，了解当前要实现的工程，生成 doc/prompt.md 用来作为 Vibe Coding 的起始 prompt。doc/prompt.md 必须指定主 agent 作为监督 Agent 跟踪整体进度，读取并维护 doc/tasks/progress.md。主 agent 根据 progress.md 自动拉起多个子 agents，每个子 agent 负责一个模块或一个明确的最小任务，避免单个 agent 上下文过长。代码必须有完整的 pytest 单元测试并通过 mypy 和 ruff 检查。生成 prompt 过程中任何不明确的地方需要向我提问。", "context_inputs": ["doc/proposal.md", "doc/detailed-design.md", "doc/tasks"], "expected_outputs": ["doc/prompt.md"]}
-  ]
-}
-"""
+def _clean_runs(args: argparse.Namespace) -> int:
+    keep = args.keep
+    if keep < 0:
+        print("--keep must be greater than or equal to 0", file=sys.stderr)
+        return 2
+
+    runs_dir = Path(args.project_root).resolve() / args.workspace / "runs"
+    if not runs_dir.exists():
+        print(f"No runs directory found: {runs_dir}")
+        return 0
+
+    runs = sorted((path for path in runs_dir.iterdir() if path.is_dir()), key=lambda path: path.name, reverse=True)
+    to_remove = runs[keep:]
+    for run_dir in to_remove:
+        if args.dry_run:
+            print(f"Would remove {run_dir}")
+        else:
+            shutil.rmtree(run_dir)
+            print(f"Removed {run_dir}")
+
+    action = "Would remove" if args.dry_run else "Removed"
+    print(f"{action} {len(to_remove)} run(s); kept {len(runs) - len(to_remove)}.")
+    return 0
 
 
 if __name__ == "__main__":

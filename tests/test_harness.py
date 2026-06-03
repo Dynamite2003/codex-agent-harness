@@ -5,15 +5,19 @@ import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from typing import Any
 
 from codex_harness.cli import main
 from codex_harness.config import load_config, parse_config
+from codex_harness.defaults import default_config_text
 from codex_harness.python_bootstrap import bootstrap_python_project
 from codex_harness.runner import (
     FORCE_NEXT_PHASE,
     SKIP_PHASE,
+    PhaseCommandFailedError,
     PhaseNeedsUserInputError,
     PhaseOutputMissingError,
+    PhaseRun,
     create_run,
 )
 
@@ -114,6 +118,74 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(phase.command[-1], "-")
             self.assertTrue(phase.prompt_stdin)
             self.assertIn(f"< {phase.prompt_file}", phase.command_file.read_text(encoding="utf-8"))
+
+    def test_run_id_is_unique_for_back_to_back_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = load_config(Path("examples/basic.harness.json"))
+
+            first = create_run(config=config, user_goal="Goal", project_root=root)
+            second = create_run(config=config, user_goal="Goal", project_root=root)
+
+            self.assertNotEqual(first.run_id, second.run_id)
+            self.assertTrue(first.run_dir.exists())
+            self.assertTrue(second.run_dir.exists())
+
+    def test_prompt_style_is_rendered_into_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["codex", "exec", "{prompt_file}"]},
+                    "prompt_style": {
+                        "language": "en-US",
+                        "tone": "concise",
+                        "must_include": ["Summary", "Risks"],
+                    },
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write docs.",
+                            "steps": "Ask.",
+                        },
+                        {
+                            "id": "design",
+                            "title": "Design",
+                            "goal": "Design.",
+                            "input": "Context.",
+                            "output": "Write design.",
+                            "steps": "Read.",
+                        },
+                        {
+                            "id": "tasks",
+                            "title": "Tasks",
+                            "goal": "Tasks.",
+                            "input": "Context.",
+                            "output": "Write tasks.",
+                            "steps": "Split.",
+                        },
+                        {
+                            "id": "implementation",
+                            "title": "Implementation",
+                            "goal": "Implement.",
+                            "input": "Context.",
+                            "output": "Write implementation.",
+                            "steps": "Code.",
+                        },
+                    ],
+                }
+            )
+
+            run = create_run(config=config, user_goal="Goal", project_root=root)
+            prompt = run.phases[0].prompt_file.read_text(encoding="utf-8")
+
+            self.assertIn("Prompt 风格：语言：en-US；语气：concise", prompt)
+            self.assertIn("Summary、Risks", prompt)
 
     def test_context_inputs_are_declared_and_missing_is_recorded(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -246,6 +318,63 @@ class HarnessTests(unittest.TestCase):
                     ],
                 }
             )
+
+    def test_rejects_mistyped_nested_config_fields(self) -> None:
+        base: dict[str, Any] = {
+            "project_name": "test",
+            "workspace": ".harness",
+            "codex": {"command": ["codex", "exec", "{prompt_file}"]},
+            "phases": [
+                {
+                    "id": "requirements",
+                    "title": "Requirements",
+                    "goal": "Requirements.",
+                    "input": "None.",
+                    "output": "Write docs.",
+                    "steps": "Ask.",
+                },
+                {
+                    "id": "design",
+                    "title": "Design",
+                    "goal": "Design.",
+                    "input": "Context.",
+                    "output": "Write design.",
+                    "steps": "Read.",
+                },
+                {
+                    "id": "tasks",
+                    "title": "Tasks",
+                    "goal": "Tasks.",
+                    "input": "Context.",
+                    "output": "Write tasks.",
+                    "steps": "Split.",
+                },
+                {
+                    "id": "implementation",
+                    "title": "Implementation",
+                    "goal": "Implement.",
+                    "input": "Context.",
+                    "output": "Write implementation.",
+                    "steps": "Code.",
+                },
+            ],
+        }
+
+        invalid_bool = dict(base)
+        invalid_bool["isolation"] = {"new_conversation_per_phase": "false"}
+        with self.assertRaisesRegex(ValueError, "must be a boolean"):
+            parse_config(invalid_bool)
+
+        invalid_constraints = dict(base)
+        invalid_constraints["global_constraints"] = "Keep scope small."
+        with self.assertRaisesRegex(ValueError, "global_constraints must be a list of strings"):
+            parse_config(invalid_constraints)
+
+        invalid_context = dict(base)
+        invalid_context["phases"] = [dict(item) for item in base["phases"]]
+        invalid_context["phases"][1]["context_inputs"] = "doc/proposal.md"
+        with self.assertRaisesRegex(ValueError, "context_inputs must be a list of strings"):
+            parse_config(invalid_context)
 
     def test_default_tasks_prompt_uses_module_task_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -503,7 +632,7 @@ class HarnessTests(unittest.TestCase):
             )
             requests: list[str] = []
 
-            def answer(phase_run, request: str) -> str:
+            def answer(phase_run: PhaseRun, request: str) -> str:
                 requests.append(phase_run.phase_id + ":" + request)
                 return "目标平台是 iOS"
 
@@ -795,6 +924,62 @@ class HarnessTests(unittest.TestCase):
             with self.assertRaises(PhaseOutputMissingError):
                 create_run(config=config, user_goal="Goal", project_root=root, execute=True)
 
+    def test_command_failure_writes_status_without_subprocess_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["python3", "-c", "import sys; sys.exit(7)"]},
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write docs.",
+                            "steps": "Ask.",
+                        },
+                        {
+                            "id": "design",
+                            "title": "Design",
+                            "goal": "Design.",
+                            "input": "Context.",
+                            "output": "Write design.",
+                            "steps": "Read.",
+                        },
+                        {
+                            "id": "tasks",
+                            "title": "Tasks",
+                            "goal": "Tasks.",
+                            "input": "Context.",
+                            "output": "Write tasks.",
+                            "steps": "Split.",
+                        },
+                        {
+                            "id": "implementation",
+                            "title": "Implementation",
+                            "goal": "Prompt.",
+                            "input": "Context.",
+                            "output": "Write prompt.",
+                            "steps": "Generate.",
+                        },
+                    ],
+                }
+            )
+
+            with self.assertRaises(PhaseCommandFailedError) as raised:
+                create_run(config=config, user_goal="Goal", project_root=root, execute=True)
+
+            self.assertIn("exit code 7", str(raised.exception))
+            run_dir = next((root / ".harness" / "runs").iterdir())
+            status = json.loads((run_dir / "requirements" / "status.json").read_text(encoding="utf-8"))
+
+            self.assertTrue((run_dir / "manifest.json").exists())
+            self.assertTrue(status["command_failed"])
+            self.assertEqual(status["returncode"], 7)
+
     def test_missing_outputs_can_be_skipped_with_audit_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -890,6 +1075,42 @@ class HarnessTests(unittest.TestCase):
             self.assertIn("[tool.ruff]", content)
             self.assertIn("[tool.mypy]", content)
             self.assertIn("[tool.pytest.ini_options]", content)
+
+    def test_packaged_default_config_matches_example_config(self) -> None:
+        packaged = json.loads(default_config_text())
+        example = json.loads(Path("examples/basic.harness.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(packaged, example)
+
+    def test_clean_runs_removes_old_run_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs_dir = root / ".harness" / "runs"
+            old_run = runs_dir / "20240101T000000000000Z"
+            new_run = runs_dir / "20240102T000000000000Z"
+            old_run.mkdir(parents=True)
+            new_run.mkdir(parents=True)
+
+            result = main(["clean-runs", "-C", str(root), "--keep", "1"])
+
+            self.assertEqual(result, 0)
+            self.assertFalse(old_run.exists())
+            self.assertTrue(new_run.exists())
+
+    def test_clean_runs_dry_run_keeps_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs_dir = root / ".harness" / "runs"
+            old_run = runs_dir / "20240101T000000000000Z"
+            new_run = runs_dir / "20240102T000000000000Z"
+            old_run.mkdir(parents=True)
+            new_run.mkdir(parents=True)
+
+            result = main(["clean-runs", "-C", str(root), "--keep", "1", "--dry-run"])
+
+            self.assertEqual(result, 0)
+            self.assertTrue(old_run.exists())
+            self.assertTrue(new_run.exists())
 
     def test_execute_passes_prompt_to_stdin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

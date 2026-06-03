@@ -55,16 +55,26 @@ def load_config(path: Path) -> HarnessConfig:
 
 
 def parse_config(raw: dict[str, Any]) -> HarnessConfig:
+    if not isinstance(raw, dict):
+        raise ValueError("config must be a JSON object")
+
     required = ["project_name", "workspace", "codex", "phases"]
     missing = [key for key in required if key not in raw]
     if missing:
         raise ValueError(f"Missing required config fields: {', '.join(missing)}")
 
-    command = raw["codex"].get("command")
-    if not isinstance(command, list) or not all(isinstance(item, str) for item in command):
+    project_name = _required_string(raw, "project_name")
+    workspace = _required_string(raw, "workspace")
+    codex_raw = _required_mapping(raw, "codex")
+    command = codex_raw.get("command")
+    if not isinstance(command, list) or not command or not all(isinstance(item, str) for item in command):
         raise ValueError("codex.command must be a list of strings")
 
-    phases = [_parse_phase(item) for item in raw["phases"]]
+    phases_raw = raw["phases"]
+    if not isinstance(phases_raw, list) or not all(isinstance(item, dict) for item in phases_raw):
+        raise ValueError("phases must be a list of objects")
+
+    phases = [_parse_phase(item) for item in phases_raw]
     ids = [phase.id for phase in phases]
     duplicates = sorted({phase_id for phase_id in ids if ids.count(phase_id) > 1})
     if duplicates:
@@ -76,21 +86,36 @@ def parse_config(raw: dict[str, Any]) -> HarnessConfig:
             + ". This harness always runs requirements -> design -> tasks -> implementation."
         )
 
-    style_raw = raw.get("prompt_style", {})
-    isolation_raw = raw.get("isolation", {})
+    style_raw = _optional_mapping(raw, "prompt_style")
+    isolation_raw = _optional_mapping(raw, "isolation")
     return HarnessConfig(
-        project_name=str(raw["project_name"]),
-        workspace=str(raw["workspace"]),
+        project_name=project_name,
+        workspace=workspace,
         codex=CodexConfig(command=command),
         isolation=IsolationConfig(
-            new_conversation_per_phase=bool(isolation_raw.get("new_conversation_per_phase", True)),
-            artifact_only_context=bool(isolation_raw.get("artifact_only_context", True)),
+            new_conversation_per_phase=_optional_bool(
+                isolation_raw,
+                "new_conversation_per_phase",
+                default=True,
+                owner="isolation",
+            ),
+            artifact_only_context=_optional_bool(
+                isolation_raw,
+                "artifact_only_context",
+                default=True,
+                owner="isolation",
+            ),
         ),
-        global_constraints=list(raw.get("global_constraints", [])),
+        global_constraints=_optional_string_list(raw, "global_constraints", default=[]),
         prompt_style=PromptStyle(
-            language=str(style_raw.get("language", "zh-CN")),
-            tone=str(style_raw.get("tone", "direct")),
-            must_include=list(style_raw.get("must_include", [])),
+            language=_optional_string(style_raw, "language", default="zh-CN", owner="prompt_style"),
+            tone=_optional_string(style_raw, "tone", default="direct", owner="prompt_style"),
+            must_include=_optional_string_list(
+                style_raw,
+                "must_include",
+                default=[],
+                owner="prompt_style",
+            ),
         ),
         phases=phases,
     )
@@ -102,25 +127,93 @@ def _parse_phase(raw: dict[str, Any]) -> Phase:
     if missing:
         raise ValueError(f"Missing required phase fields: {', '.join(missing)}")
 
-    phase_id = str(raw["id"])
-    if "/" in phase_id or phase_id in {".", ".."}:
+    phase_id = _required_string(raw, "id", owner="phase")
+    if "/" in phase_id or "\\" in phase_id or phase_id in {".", ".."}:
         raise ValueError(f"Invalid phase id: {phase_id}")
 
     return Phase(
         id=phase_id,
-        title=str(raw["title"]),
-        goal=_string_list(raw["goal"]),
-        input=_string_list(raw["input"]),
-        output=_string_list(raw["output"]),
-        steps=_string_list(raw["steps"]),
-        context_inputs=list(raw.get("context_inputs", [])),
-        expected_outputs=list(raw.get("expected_outputs", [])),
+        title=_required_string(raw, "title", owner=f"phase {phase_id}"),
+        goal=_prompt_string_list(raw["goal"], field=f"phase {phase_id}.goal"),
+        input=_prompt_string_list(raw["input"], field=f"phase {phase_id}.input"),
+        output=_prompt_string_list(raw["output"], field=f"phase {phase_id}.output"),
+        steps=_prompt_string_list(raw["steps"], field=f"phase {phase_id}.steps"),
+        context_inputs=_optional_string_list(raw, "context_inputs", default=[], owner=f"phase {phase_id}"),
+        expected_outputs=_optional_string_list(raw, "expected_outputs", default=[], owner=f"phase {phase_id}"),
     )
 
 
-def _string_list(value: Any) -> list[str]:
+def _prompt_string_list(value: Any, *, field: str) -> list[str]:
     if isinstance(value, str):
         return [value]
     if isinstance(value, list) and all(isinstance(item, str) for item in value):
         return value
-    raise ValueError("phase prompt fields must be strings or lists of strings")
+    raise ValueError(f"{field} must be a string or list of strings")
+
+
+def _required_string(raw: dict[str, Any], key: str, *, owner: str = "config") -> str:
+    value = raw.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{owner}.{key} must be a non-empty string")
+    return value
+
+
+def _optional_string(
+    raw: dict[str, Any],
+    key: str,
+    *,
+    default: str,
+    owner: str = "config",
+) -> str:
+    if key not in raw:
+        return default
+    value = raw[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{owner}.{key} must be a non-empty string")
+    return value
+
+
+def _required_mapping(raw: dict[str, Any], key: str, *, owner: str = "config") -> dict[str, Any]:
+    value = raw.get(key)
+    if not isinstance(value, dict):
+        raise ValueError(f"{owner}.{key} must be an object")
+    return value
+
+
+def _optional_mapping(raw: dict[str, Any], key: str, *, owner: str = "config") -> dict[str, Any]:
+    if key not in raw:
+        return {}
+    value = raw[key]
+    if not isinstance(value, dict):
+        raise ValueError(f"{owner}.{key} must be an object")
+    return value
+
+
+def _optional_bool(
+    raw: dict[str, Any],
+    key: str,
+    *,
+    default: bool,
+    owner: str = "config",
+) -> bool:
+    if key not in raw:
+        return default
+    value = raw[key]
+    if not isinstance(value, bool):
+        raise ValueError(f"{owner}.{key} must be a boolean")
+    return value
+
+
+def _optional_string_list(
+    raw: dict[str, Any],
+    key: str,
+    *,
+    default: list[str],
+    owner: str = "config",
+) -> list[str]:
+    if key not in raw:
+        return list(default)
+    value = raw[key]
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"{owner}.{key} must be a list of strings")
+    return value

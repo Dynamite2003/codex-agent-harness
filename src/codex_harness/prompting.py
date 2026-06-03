@@ -26,6 +26,9 @@ def build_prompt(
     lines.extend(_section("目标", phase.goal, values))
     lines.append("")
     input_items = list(phase.input)
+    style_instruction = _style_instruction(config)
+    if style_instruction:
+        input_items.append(style_instruction)
     if config.isolation.new_conversation_per_phase:
         input_items.append(
             "对话隔离：这是 {phase_title} 阶段的新对话，不要依赖其他阶段的聊天历史；"
@@ -72,6 +75,14 @@ def _conversation_policy(config: HarnessConfig) -> str:
     if config.isolation.new_conversation_per_phase:
         return "每个阶段使用新的 Codex 对话。"
     return "允许复用对话上下文。"
+
+
+def _style_instruction(config: HarnessConfig) -> str | None:
+    style = config.prompt_style
+    items = [f"语言：{style.language}", f"语气：{style.tone}"]
+    if style.must_include:
+        items.append("必须覆盖这些内容或标题：" + "、".join(style.must_include))
+    return "Prompt 风格：" + "；".join(items) + "。"
 
 
 def _context_text(*, phase: Phase, project_root: Path, context_files: list[Path]) -> str:

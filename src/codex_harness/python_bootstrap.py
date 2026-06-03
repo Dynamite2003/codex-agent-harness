@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-
 
 DEV_DEPENDENCIES = ["ruff", "mypy", "pytest", "pytest-cov"]
 
@@ -142,14 +142,12 @@ files = ["{package_name}", "tests"]"""
 
 
 def _pytest_config() -> str:
-    return """[tool.pytest.ini_options]
+    return '''[tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q\""""
+addopts = "-q"'''
 
 
 def _write_script(path: Path, commands: list[list[str]]) -> None:
-    import shlex
-
     lines = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
