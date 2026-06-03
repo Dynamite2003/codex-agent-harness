@@ -406,8 +406,11 @@ class HarnessTests(unittest.TestCase):
             self.assertIn("监督 Agent 跟踪整体进度", prompt)
             self.assertIn("doc/tasks/progress.md", prompt)
             self.assertIn("自动拉起多个子 agents", prompt)
-            self.assertIn("pytest 单元测试", prompt)
-            self.assertIn("mypy 和 ruff 检查", prompt)
+            self.assertIn("按项目技术栈补充 focused tests 或等价验证", prompt)
+            self.assertIn("先识别现有技术栈和可用工具", prompt)
+            self.assertIn("不要为静态 Web、无依赖项目或已有项目强行引入不存在的 uv", prompt)
+            self.assertIn("静态 Web 或无依赖前端项目至少做契约测试", prompt)
+            self.assertIn("明确文件所有权和合并顺序", prompt)
             self.assertEqual(
                 context["context_inputs"],
                 ["doc/proposal.md", "doc/detailed-design.md", "doc/tasks"],
@@ -559,6 +562,83 @@ class HarnessTests(unittest.TestCase):
             self.assertTrue((phase_dir / "needs-user-input.md").exists())
             self.assertTrue(status["needs_user_input"])
             self.assertFalse((root / "doc" / "detailed-design.md").exists())
+
+    def test_execute_ignores_inline_marker_and_question_words_in_logs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_codex = (
+                "from pathlib import Path\n"
+                "import sys\n"
+                "phase=sys.argv[1]\n"
+                "root=Path('{project_root}')\n"
+                "doc=root/'doc'\n"
+                "doc.mkdir(exist_ok=True)\n"
+                "if phase == 'requirements':\n"
+                "    (doc/'proposal.md').write_text('proposal\\n', encoding='utf-8')\n"
+                "    print('日志说明：prompt 中提到 HARNESS_NEEDS_USER_INPUT 只是协议文本，请确认不应暂停。')\n"
+                "elif phase == 'design':\n"
+                "    (doc/'detailed-design.md').write_text('design\\n', encoding='utf-8')\n"
+                "elif phase == 'tasks':\n"
+                "    tasks=doc/'tasks'\n"
+                "    tasks.mkdir(exist_ok=True)\n"
+                "    (tasks/'progress.md').write_text('- [x] core\\n', encoding='utf-8')\n"
+                "elif phase == 'implementation':\n"
+                "    (doc/'prompt.md').write_text('prompt\\n', encoding='utf-8')\n"
+            )
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["python3", "-c", fake_codex, "{phase_id}"]},
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write docs.",
+                            "steps": "Ask.",
+                            "expected_outputs": ["doc/proposal.md"],
+                        },
+                        {
+                            "id": "design",
+                            "title": "Design",
+                            "goal": "Design.",
+                            "input": "Context.",
+                            "output": "Write design.",
+                            "steps": "Read.",
+                            "expected_outputs": ["doc/detailed-design.md"],
+                        },
+                        {
+                            "id": "tasks",
+                            "title": "Tasks",
+                            "goal": "Tasks.",
+                            "input": "Context.",
+                            "output": "Write tasks.",
+                            "steps": "Split.",
+                            "expected_outputs": ["doc/tasks", "doc/tasks/progress.md"],
+                        },
+                        {
+                            "id": "implementation",
+                            "title": "Implementation",
+                            "goal": "Prompt.",
+                            "input": "Context.",
+                            "output": "Write prompt.",
+                            "steps": "Generate.",
+                            "expected_outputs": ["doc/prompt.md"],
+                        },
+                    ],
+                }
+            )
+
+            run = create_run(config=config, user_goal="Goal", project_root=root, execute=True)
+            requirements_dir = run.run_dir / "requirements"
+            status = json.loads((requirements_dir / "status.json").read_text(encoding="utf-8"))
+
+            self.assertTrue(status["ok"])
+            self.assertFalse(status["needs_user_input"])
+            self.assertFalse((requirements_dir / "needs-user-input.md").exists())
+            self.assertTrue((root / "doc" / "prompt.md").exists())
 
     def test_execute_reads_user_input_and_resumes_same_phase(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

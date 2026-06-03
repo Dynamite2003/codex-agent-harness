@@ -105,7 +105,7 @@ codex-harness run --config examples/basic.harness.json --project-root /path/to/p
 如果 Codex CLI 命令本身返回非零退出码，harness 不会直接打印 Python traceback，而是会在当前阶段写入
 `status.json`，标记 `command_failed` 和 `returncode`，并提示查看该阶段的 `stdout.txt` / `stderr.txt`。
 
-如果 Codex 在某个阶段输出 `HARNESS_NEEDS_USER_INPUT` 或明确要求用户确认/补充信息，执行模式会在同一个进程中暂停当前阶段，打印问题并等待你输入回答。输入多行回答后，用单独一行 `END` 提交；harness 会把回答记录到 `user-answers.md`，追加到当前阶段 `prompt.md`，重新执行同一阶段。只有当前阶段不再请求补充且产物校验通过后，才会进入下一阶段。
+如果 Codex 在某个阶段输出独占一行的 `HARNESS_NEEDS_USER_INPUT`，执行模式会在同一个进程中暂停当前阶段，打印该标记后的问题并等待你输入回答。输入多行回答后，用单独一行 `END` 提交；harness 会把回答记录到 `user-answers.md`，追加到当前阶段 `prompt.md`，重新执行同一阶段。只有当前阶段不再请求补充且产物校验通过后，才会进入下一阶段。普通日志或 prompt 文本里内联提到该标记不会触发暂停。
 
 如果 Codex 反复追问但你认为当前阶段产物已经足够，可以输入单独一行 `NEXT_PHASE`。如果你在 `NEXT_PHASE` 前已经输入了回答，harness 会先把这些回答记录到 `user-answers.md`，再校验当前阶段声明的产物；产物存在则进入下一阶段，同时写入 `force-next-phase.md` 作为审计记录。
 

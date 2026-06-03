@@ -135,9 +135,12 @@
         "阅读输入信息，了解当前要实现的工程，生成 doc/prompt.md 用来作为 Vibe Coding 的起始 prompt。",
         "doc/prompt.md 必须指定主 agent 作为监督 Agent 跟踪整体进度，读取并维护 doc/tasks/progress.md。",
         "doc/prompt.md 必须要求主 agent 根据 progress.md 自动拉起多个子 agents，每个子 agent 负责一个模块或一个明确的最小任务，避免单个 agent 上下文过长。",
-        "doc/prompt.md 必须要求子 agents 根据对应的 doc/tasks/<module-name>.md 实现代码、补充 pytest 单元测试，并把完成状态回写到任务 checklist。",
+        "doc/prompt.md 必须要求子 agents 根据对应的 doc/tasks/<module-name>.md 实现代码、按项目技术栈补充 focused tests 或等价验证，并把完成状态回写到任务 checklist。",
         "doc/prompt.md 必须要求整个实现过程没有人工参与；监督 Agent 负责分配任务、合并结果、处理失败、重跑验证并更新 progress.md。",
-        "doc/prompt.md 必须要求代码有完整的 pytest 单元测试，并通过 mypy 和 ruff 检查；Python 项目优先使用 uv run pytest、uv run mypy、uv run ruff check .。",
+        "doc/prompt.md 必须要求监督 Agent 先识别现有技术栈和可用工具，再选择验证命令；不要为静态 Web、无依赖项目或已有项目强行引入不存在的 uv、pytest、mypy、ruff、npm、node。",
+        "doc/prompt.md 必须要求 Python 项目优先沿用仓库现有测试命令；只有已经 bootstrap-python 或项目已有 uv/pytest/mypy/ruff 配置时，才使用 uv run pytest、uv run mypy、uv run ruff check .。",
+        "doc/prompt.md 必须要求静态 Web 或无依赖前端项目至少做契约测试、源码级逻辑测试、DOM smoke 或浏览器截图验证；如果浏览器或运行时不可用，要记录不可用原因和替代验证。",
+        "doc/prompt.md 必须提醒监督 Agent 拉起子 agents 时明确文件所有权和合并顺序；如果使用 full-history fork，不要传入当前工具不支持的 agent_type、model、reasoning_effort 等参数。",
         "生成 prompt 过程中任何不明确的地方需要向我提问，不要猜测我的意图。"
       ],
       "context_inputs": [

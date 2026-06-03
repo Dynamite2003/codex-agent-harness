@@ -434,38 +434,14 @@ def _record_skip_phase(phase_run: PhaseRun, *, missing: list[Path]) -> None:
 
 
 def _detect_user_input_request(output: str) -> str | None:
-    text = output.strip()
-    if not text:
+    if not output.strip():
         return None
 
     marker = "HARNESS_NEEDS_USER_INPUT"
-    if marker in text:
-        return text[text.index(marker) :]
-
-    lowered = text.lower()
-    question_markers = [
-        "请确认",
-        "请你确认",
-        "请回答",
-        "请提供",
-        "需要你",
-        "需要您",
-        "需要用户",
-        "需要确认",
-        "需要补充",
-        "待你确认",
-        "待用户确认",
-        "有几个问题",
-        "以下问题",
-        "before i continue",
-        "before proceeding",
-        "please confirm",
-        "please provide",
-        "need your input",
-        "need clarification",
-    ]
-    if any(marker in lowered for marker in question_markers):
-        return text
+    lines = output.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() == marker:
+            return "\n".join(lines[index:]).strip()
     return None
 
 
