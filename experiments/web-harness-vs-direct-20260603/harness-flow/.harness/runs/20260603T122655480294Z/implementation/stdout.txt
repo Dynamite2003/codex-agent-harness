@@ -1,0 +1,11 @@
+已生成实现阶段 Vibe Coding prompt：[`doc/prompt.md`](/Users/bytedance/Documents/Programs/Vibe2Spec/experiments/web-harness-vs-direct-20260603/harness-flow/doc/prompt.md)。
+
+内容已覆盖 `目标`、`输入`、`输出`、`步骤`，并明确要求：
+
+- 主 agent 作为监督 Agent 维护 `doc/tasks/progress.md`
+- 自动拉起多个子 agents 分模块实现
+- 子 agents 按 `doc/tasks/<module-name>.md` 实现、补 pytest、回写 checklist
+- 全流程无人工参与
+- 运行 `uv run pytest`、`uv run mypy`、`uv run ruff check .`，并保留现有 `python3 -m unittest discover -s tests` 契约测试
+
+我只生成并复查了 prompt 文档，未运行实现阶段测试。

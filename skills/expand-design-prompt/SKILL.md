@@ -1,6 +1,6 @@
 ---
 name: expand-design-prompt
-description: Expand a requirements document or short product requirement into a complete Chinese design-stage prompt for Codex. Use when the user says 设计 prompt, 设计阶段, 详细设计, 架构设计, or wants a lightweight prompt that asks Codex to generate doc/detailed-design.md with modules, data model, APIs, workflows, UI states, risks, and test strategy without running codex-agent-harness.
+description: Expand a requirements document or short product requirement into a complete Chinese Spec-first design-stage prompt for Codex. Use when the user says 设计 prompt, 设计阶段, 详细设计, 架构设计, ADR, or wants a lightweight prompt that asks Codex to generate doc/detailed-design.md with modules, data model, API contracts, ADRs, acceptance-criteria mapping, risks, and test strategy without running codex-agent-harness.
 ---
 
 # Expand Design Prompt
@@ -49,20 +49,26 @@ Return only the expanded prompt, preferably in a fenced `text` block. Include th
 9. 后台任务、队列、定时任务或外部集成
 10. 权限、隐私、安全、合规和审计设计
 11. 错误处理、空状态、加载状态和降级策略
-12. 测试策略
-13. 风险、取舍和待确认问题
+12. Key Design Decisions (ADR)
+13. Acceptance Criteria 映射
+14. 测试策略
+15. 风险、取舍和待确认问题
 
 步骤：
 1. 读取需求文档和项目目录，确认是否已有技术栈和架构约定。
 2. 优先沿用现有项目结构和技术选型；如果是空项目，给出保守、易实现的 MVP 设计。
 3. 将需求拆成清晰模块，说明每个模块的输入、输出、状态和边界。
-4. 对涉及 AI、外部搜索、提醒、支付、日历、邮件、权限等能力，明确失败模式和降级策略。
-5. 对不明确但不阻塞设计的点，记录为待确认；对阻塞设计的点，先向用户提问。
-6. 不要生成任务 checklist，不要修改业务代码。
+4. 把需求阶段的 ADR Candidates 收敛为明确 ADR；每条 ADR 必须包含 Decision、Why、Alternatives / Tradeoffs。
+5. 将 EARS 需求和 GIVEN-WHEN-THEN 验收标准映射到模块、接口或测试策略。
+6. 对涉及 AI、外部搜索、提醒、支付、日历、邮件、权限等能力，明确失败模式和降级策略。
+7. 如果设计会改变既有关键行为或已有 spec，列出需要回填的 spec 文件。
+8. 对不明确但不阻塞设计的点，记录为待确认；对阻塞设计的点，先向用户提问。
+9. 不要生成任务 checklist，不要修改业务代码。
 
 质量要求：
 - 设计要足够具体，后续可以直接拆任务。
 - 避免过度工程化；MVP 优先简单、可验证、可迭代。
+- WHY 比 WHAT 重要；不要只描述“做什么”，必须解释关键设计为什么这样做。
 - 明确数据来源、可信度、人工校验、审计或合规相关边界。
 - 不要臆造外部事实；需要最新政策、考试、比赛、价格或 API 细节时要求联网核验。
 ```

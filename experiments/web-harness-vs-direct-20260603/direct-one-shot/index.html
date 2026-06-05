@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sprint Board Lite</title>
+    <link rel="stylesheet" href="src/styles.css">
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <header class="app-header">
+        <div>
+          <h1>Sprint Board Lite</h1>
+          <p>Sprint planning, saved locally.</p>
+        </div>
+      </header>
+
+      <section class="metrics" aria-label="Sprint metrics">
+        <article class="metric-card">
+          <span class="metric-label">Tasks</span>
+          <strong id="metric-total">0</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Complete</span>
+          <strong id="metric-completion">0%</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Effort</span>
+          <strong id="metric-effort">0</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Open high</span>
+          <strong id="metric-high-priority">0</strong>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <aside class="panel" aria-label="Task controls">
+          <form id="task-form" class="task-form">
+            <h2>Add task</h2>
+            <div class="field">
+              <label for="task-title">Title</label>
+              <input id="task-title" name="title" type="text" autocomplete="off" required>
+            </div>
+            <div class="field-grid">
+              <div class="field">
+                <label for="task-owner">Owner</label>
+                <input id="task-owner" name="owner" type="text" autocomplete="off">
+              </div>
+              <div class="field">
+                <label for="task-effort">Effort</label>
+                <input id="task-effort" name="effort" type="number" min="0" step="0.5" value="1">
+              </div>
+            </div>
+            <div class="field-grid">
+              <div class="field">
+                <label for="task-priority">Priority</label>
+                <select id="task-priority" name="priority">
+                  <option value="low">Low</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="task-status">Status</label>
+                <select id="task-status" name="status">
+                  <option value="backlog" selected>Backlog</option>
+                  <option value="doing">Doing</option>
+                  <option value="review">Review</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="task-notes">Notes</label>
+              <textarea id="task-notes" name="notes" rows="3"></textarea>
+            </div>
+            <button class="primary-action" type="submit">Add task</button>
+            <p id="app-message" class="app-message" role="status" aria-live="polite"></p>
+          </form>
+
+          <div class="filters" aria-label="Board filters">
+            <h2>Filter</h2>
+            <div class="field">
+              <label for="search-input">Search</label>
+              <input id="search-input" type="search" autocomplete="off">
+            </div>
+            <div class="field-grid">
+              <div class="field">
+                <label for="status-filter">Status</label>
+                <select id="status-filter">
+                  <option value="all">All</option>
+                  <option value="backlog">Backlog</option>
+                  <option value="doing">Doing</option>
+                  <option value="review">Review</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="owner-filter">Owner</label>
+                <select id="owner-filter">
+                  <option value="all">All</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="json-tools" aria-label="JSON tools">
+            <h2>JSON</h2>
+            <div class="button-row">
+              <button id="export-json" type="button">Export</button>
+              <button id="import-json" type="button">Import</button>
+            </div>
+            <label class="file-label" for="import-file">Import file</label>
+            <input id="import-file" type="file" accept=".json,application/json">
+            <label for="export-output">Export data</label>
+            <textarea id="export-output" rows="5" readonly></textarea>
+          </div>
+        </aside>
+
+        <section class="board" id="board" aria-label="Sprint board">
+          <section class="column" data-status="backlog" aria-labelledby="backlog-heading">
+            <h2 id="backlog-heading">Backlog</h2>
+            <div class="task-list" aria-live="polite"></div>
+          </section>
+          <section class="column" data-status="doing" aria-labelledby="doing-heading">
+            <h2 id="doing-heading">Doing</h2>
+            <div class="task-list" aria-live="polite"></div>
+          </section>
+          <section class="column" data-status="review" aria-labelledby="review-heading">
+            <h2 id="review-heading">Review</h2>
+            <div class="task-list" aria-live="polite"></div>
+          </section>
+          <section class="column" data-status="done" aria-labelledby="done-heading">
+            <h2 id="done-heading">Done</h2>
+            <div class="task-list" aria-live="polite"></div>
+          </section>
+        </section>
+      </section>
+    </div>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>

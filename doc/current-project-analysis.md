@@ -1,10 +1,10 @@
-# 当前项目梳理：Codex Agent Harness
+# 当前项目梳理：Coding Agent Harness
 
-更新时间：2026-06-03
+更新时间：2026-06-05
 
 ## 1. 项目介绍
 
-Codex Agent Harness 是一个轻量级的 Codex CLI 阶段化执行框架。它的核心目标是把一个软件开发目标拆成稳定、可审计、可恢复的阶段流程，让 Codex 在每个阶段只处理当前阶段应该处理的工作，并把阶段 prompt、上下文清单、执行命令、标准输出、错误输出和状态文件都保存到磁盘。
+Coding Agent Harness 是一个轻量级的 Codex CLI 阶段化执行框架。它的核心目标是把一个软件开发目标拆成稳定、可审计、可恢复的阶段流程，让 Codex 在每个阶段只处理当前阶段应该处理的工作，并把阶段 prompt、上下文清单、执行命令、标准输出、错误输出和状态文件都保存到磁盘。
 
 当前项目的 Python 包名是 `codex-agent-harness`，主要入口包括：
 
@@ -14,14 +14,15 @@ Codex Agent Harness 是一个轻量级的 Codex CLI 阶段化执行框架。它�
 - 默认配置：`src/codex_harness/default.harness.json`。
 - 示例配置：`examples/basic.harness.json`。
 - 单元测试：`tests/test_harness.py`。
-- 轻量 prompt skills：`skills/expand-requirements-prompt`、`skills/expand-design-prompt`、`skills/expand-tasks-prompt`、`skills/expand-implementation-prompt`。
+- 轻量 prompt skills：`skills/vibe2spec-flow`、`skills/expand-requirements-prompt`、`skills/expand-design-prompt`、`skills/expand-tasks-prompt`、`skills/expand-implementation-prompt`。
+- 论文式课程报告：`doc/paper-style-report.md`。
 
 项目当前固定支持四个软件开发阶段：
 
 1. 需求阶段：生成 `doc/proposal.md`。
 2. 设计阶段：生成 `doc/detailed-design.md`。
 3. 任务阶段：生成 `doc/tasks/<module-name>.md` 和 `doc/tasks/progress.md`。
-4. 实现阶段：生成 `doc/prompt.md`，作为后续 Vibe Coding 或监督 Agent 的起始 prompt。
+4. 实现阶段：生成 `doc/prompt.md`，作为后续轻量 Vibe Coding 的起始 prompt，默认由单个 agent 顺序实现、验证并更新任务进度。
 
 从定位上看，它不是一个完整的多 Agent 调度平台，也不是一个通用工作流引擎；它更像是一个小而硬的工程护栏：把 Codex 的输入、输出、阶段边界、上下文传递和失败处理显式化，降低长对话和自由发挥带来的不可控性。
 
@@ -38,7 +39,7 @@ Codex Agent Harness 是一个轻量级的 Codex CLI 阶段化执行框架。它�
 
 Codex Agent Harness 对这些问题的解决思路是：不试图替代 Codex 的能力，而是在 Codex 外层增加一个最小阶段编排器。它把“让 Codex 做什么、可以看什么、必须产出什么、失败时如何停止”都写入配置和落盘记录中，使每次运行都能被回看和复现。
 
-项目还特别面向 Vibe Coding 场景：先用四阶段规划生成需求、设计和任务文件，再让实现阶段生成一个监督 Agent prompt，由监督 Agent 后续读取 `doc/tasks/progress.md`，拆分子任务、拉起子 agents、实现代码、补测试并更新 checklist。
+项目还特别面向 Vibe Coding 场景：先用四阶段规划生成需求、设计和任务文件，再让实现阶段生成一个轻量实现 prompt，由 Codex 后续读取 `doc/tasks/progress.md`，默认顺序实现代码、补测试并更新 checklist；只有任务独立、文件所有权清晰且上下文明显过长时，才可选启用子 agents。
 
 ## 3. 方法与技术路线
 
@@ -123,6 +124,8 @@ requirements -> design -> tasks -> implementation
 
 当前 CLI 支持以下子命令：
 
+- `init-skill-flow`：初始化轻量 Vibe2Spec skill 工作流，创建项目内 quickstart 和文档目录。
+- `validate-artifacts`：检查 Spec-first artifacts 是否包含必要结构和基本质量项。
 - `init`：把默认 harness 配置复制到项目中的 `harness.json`。
 - `run`：使用显式配置创建一次阶段化运行，可选择真实执行 Codex CLI。
 - `start`：更短的入口，默认读取目标项目的 `harness.json`，没有则生成 `.harness/default.harness.json`。
@@ -150,8 +153,9 @@ requirements -> design -> tasks -> implementation
 - `expand-design-prompt`
 - `expand-tasks-prompt`
 - `expand-implementation-prompt`
+- `vibe2spec-flow`
 
-这些 skills 不运行 harness、不创建文件、不实现代码，只把一句简单需求扩展成某个阶段可复制使用的中文 prompt。它们适合早期创意探索，或者用户只想生成单阶段 prompt、暂时不需要完整四阶段审计链路的场景。
+其中 `expand-*` skills 不运行 harness、不创建文件、不实现代码，只把一句简单需求扩展成某个阶段可复制使用的中文 prompt。`vibe2spec-flow` 则把 Spec-first 流程内化到 Codex 中，适合不启动 CLI harness、直接在当前会话里创建或更新规划 artifact 并推进实现的轻量场景。
 
 ## 4. 当前结果
 
@@ -171,8 +175,9 @@ requirements -> design -> tasks -> implementation
 - 可以为 Python 项目生成 uv、ruff、mypy、pytest 的基础配置。
 - 可以清理旧 run 目录。
 - 可以通过轻量 skills 生成单阶段 prompt。
-- 默认实现阶段 prompt 会先要求监督 Agent 识别现有技术栈和可用工具，再选择验证命令，避免把 Python 项目的 `uv`、`pytest`、`mypy`、`ruff` 约束强加给静态 Web 或无依赖项目。
-- 默认实现阶段 prompt 会提醒监督 Agent 为子 agents 明确文件所有权和合并顺序，并避免传入当前工具不支持的 full-history fork 参数。
+- 默认流程吸收 Spec-first 规范，需求和设计 prompt 会要求 EARS、ADR、GIVEN-WHEN-THEN 验收标准和 spec 回填记录。
+- 默认实现阶段 prompt 会先要求 agent 识别现有技术栈和可用工具，再选择验证命令，避免把 Python 项目的 `uv`、`pytest`、`mypy`、`ruff` 约束强加给静态 Web 或无依赖项目。
+- 默认实现阶段 prompt 改为单 agent 顺序执行；只有任务独立、文件范围清晰且上下文明显过长时，才允许可选启用子 agents。
 
 ### 4.2 工程结构结果
 
@@ -184,6 +189,8 @@ requirements -> design -> tasks -> implementation
 | `src/codex_harness/config.py` | JSON 配置解析、字段校验、阶段顺序约束、数据结构定义 |
 | `src/codex_harness/prompting.py` | 阶段 prompt 渲染、上下文清单渲染、风格和隔离策略注入 |
 | `src/codex_harness/runner.py` | run 目录创建、阶段文件生成、命令执行、状态记录、用户补答和产物缺失处理 |
+| `src/codex_harness/artifact_validation.py` | Spec-first artifact 内容校验 |
+| `src/codex_harness/skill_flow.py` | 轻量 skill 工作流初始化和项目 quickstart 生成 |
 | `src/codex_harness/python_bootstrap.py` | Python 项目初始化、pyproject 补齐、uv bootstrap 脚本生成 |
 | `src/codex_harness/defaults.py` | 从包资源读取默认 harness 配置 |
 | `src/codex_harness/default.harness.json` | 默认四阶段配置 |
@@ -195,17 +202,17 @@ requirements -> design -> tasks -> implementation
 
 ```text
 PYTHONPATH=src python3 -m unittest discover -s tests
-结果：Ran 26 tests in 1.255s, OK
+结果：Ran 31 tests, OK
 ```
 
 ```text
-.venv/bin/python -m ruff check src tests examples
+.venv/bin/python -m ruff check .
 结果：All checks passed!
 ```
 
 ```text
 PYTHONPATH=src .venv/bin/python -m mypy src tests
-结果：Success: no issues found in 8 source files
+结果：Success: no issues found
 ```
 
 需要注意的是，系统级 `python3` 环境没有安装 `ruff` 和 `mypy`：
@@ -222,8 +229,11 @@ PYTHONPATH=src python3 -m mypy src tests
 
 ### 4.4 测试覆盖结果
 
-现有 26 个单元测试覆盖了主要行为：
+现有 31 个单元测试覆盖了主要行为：
 
+- 轻量 skill flow 初始化和 quickstart 生成。
+- artifact 内容校验对缺失 Spec 章节的失败报告。
+- artifact 内容校验对完整 Spec-first 文档的通过判断。
 - 默认 `start` 流程和无子命令自动转为 `start`。
 - run 目录、阶段 prompt、context、command 文件生成。
 - run id 唯一性。
@@ -270,11 +280,50 @@ PYTHONPATH=src python3 -m mypy src tests
 
 - `_detect_user_input_request` 只接受独占一行的 `HARNESS_NEEDS_USER_INPUT` 标记，并返回该行之后的问题内容。
 - 移除基于自然语言关键词的追问启发式，避免普通日志误触发。
-- 默认实现阶段 prompt 改为要求监督 Agent 先识别技术栈和可用工具，再选择测试与验证方式。
+- 默认实现阶段 prompt 改为要求 agent 先识别技术栈和可用工具，再选择测试与验证方式。
 - Python 工具链约束改为条件触发：只有项目已 bootstrap 或已有对应配置时，才优先使用 `uv run pytest`、`uv run mypy`、`uv run ruff check .`。
 - 静态 Web 或无依赖前端项目改为要求契约测试、源码级逻辑测试、DOM smoke 或浏览器截图验证；如果浏览器或运行时不可用，需要记录原因和替代验证。
-- 默认实现阶段 prompt 增加子 agent 文件所有权、合并顺序和 unsupported 参数约束，降低多 agent 协作时的冲突和工具调用失败。
+- 默认实现阶段 prompt 增加 Spec/ADR/验收标准遵守要求，并要求记录 spec 回填或实现偏离。
 - 新增回归测试，确保日志里内联提到协议标记或出现“请确认”时不会暂停。
+
+### 4.7 课程实验：Proration 计费边界案例
+
+为了避免只用简单 Todo demo 得出不公平结论，当前项目补充了一个更容易出错的静态 Web 任务实验：[experiments/proration-vibe2spec-vs-direct-20260605](../experiments/proration-vibe2spec-vs-direct-20260605)。任务原始输入只有一句话：
+
+> 做一个订阅升级/降级的按天计费计算器，输入当前月费、新月费、账期开始/结束日期、变更日期、优惠券和税率，输出本账期应补收或退款金额。
+
+这个任务的难点不在 UI，而在“按天计费”背后的隐含业务规则。Direct baseline 模拟的是直接把一句需求交给 Codex 生成实现，因此产物只有 `direct-baseline/index.html` 和一份短 README；Vibe2Spec 组则先生成 `proposal.md`、`detailed-design.md`、`doc/tasks/`、`doc/prompt.md` 和 `doc/verification.md`，再按这些 artifact 实现。
+
+实验结果如下：
+
+| 工作流 | 功能探针结果 | 证据 |
+| --- | ---: | --- |
+| Direct baseline | 2 / 6 | [direct-probe-result.json](../experiments/proration-vibe2spec-vs-direct-20260605/direct-probe-result.json) |
+| Vibe2Spec | 6 / 6 | [vibe2spec-probe-result.json](../experiments/proration-vibe2spec-vs-direct-20260605/vibe2spec-probe-result.json) |
+
+两边都能正常渲染页面，截图分别保存在 [direct-render.png](../experiments/proration-vibe2spec-vs-direct-20260605/direct-render.png) 和 [vibe2spec-render.png](../experiments/proration-vibe2spec-vs-direct-20260605/vibe2spec-render.png)。这说明 UI 是否可见并不能证明计费逻辑正确，必须用业务 fixture 验证。
+
+Direct baseline 的主要失败原因是采用了常见但错误的简化：把每个账期固定按 30 天计算。探针暴露了三个实际计费错误：
+
+| Case | Direct baseline | 期望结果 | 问题 |
+| --- | ---: | ---: | --- |
+| 2026 年 2 月，含 10% coupon 和 8.25% tax | 27.28 | 29.23 | 2026 年 2 月实际账期是 28 天，不是 30 天 |
+| 2024 闰年 2 月 | 30.00 | 31.03 | 2024 年 2 月实际账期是 29 天 |
+| 2026 年 1 月降级退款 | -32.00 | -30.97 | 1 月账期是 31 天，退款金额应保留负数 |
+
+Vibe2Spec 的价值体现在它把这些隐含规则前置到了不同 artifact 中：
+
+| Vibe2Spec 环节 | 考虑到的问题 | 对应证据 | 产生的效果 |
+| --- | --- | --- | --- |
+| 需求阶段 `proposal.md` | “按天计费”不能默认 30 天；变更日到期末才是受影响天数；coupon 先于 tax；tax 作用于净差额；最终金额才 round；降级为 refund；非法日期拒绝 | [Functional Requirements](../experiments/proration-vibe2spec-vs-direct-20260605/vibe2spec/doc/proposal.md) | 把一句模糊需求拆成可审阅的 EARS 规则，减少实现时自由解释 |
+| 验收阶段 `proposal.md` | 2026 年 2 月 28 天、2024 闰年 2 月 29 天、31 天账期降级退款、非法日期 | [Acceptance Criteria](../experiments/proration-vibe2spec-vs-direct-20260605/vibe2spec/doc/proposal.md) | 把边界条件变成具体数值 fixture，例如 `29.23`、`31.03`、`-30.97` |
+| 设计阶段 `detailed-design.md` | JavaScript 日期解析可能受时区或 DST 影响；退款不应丢失符号 | [ADR: UTC Date-Only Arithmetic](../experiments/proration-vibe2spec-vs-direct-20260605/vibe2spec/doc/detailed-design.md) | 实现采用 UTC date-only day difference，并保留负数 refund |
+| 实现 prompt `doc/prompt.md` | 编码阶段不能重新自由发挥，要遵循 Spec / ADR / Acceptance Criteria | [Implementation Prompt](../experiments/proration-vibe2spec-vs-direct-20260605/vibe2spec/doc/prompt.md) | 实现阶段有明确输入和验证要求，并暴露 `window.calculateProration` 供探针调用 |
+| 验证阶段 `doc/verification.md` 与 `probe_proration.py` | 页面可渲染不代表业务正确，需要直接验证计算核心 | [verification.md](../experiments/proration-vibe2spec-vs-direct-20260605/vibe2spec/doc/verification.md)、[probe_proration.py](../experiments/proration-vibe2spec-vs-direct-20260605/probe_proration.py) | Vibe2Spec 通过全部 6 项探针；Direct baseline 虽能渲染但只通过 2 项 |
+
+因此，这个实验展示的优势不是“文档更多”，而是 Spec-first 把模糊业务意图转化为需求规则、设计决策、验收 fixture 和可执行验证。对于简单 Todo 任务，Direct Codex 和 Vibe2Spec 可以打平；但当任务存在真实业务边界时，Vibe2Spec 能更早暴露隐含假设，并把错误从“上线后计算错”前移到“实现前或验证时被 fixture 拦住”。
+
+这个实验仍有边界：Direct baseline 是仓库中的 direct-style 对照产物，不是多次独立随机采样的 Codex 运行结果。更严格的课程展示可以扩展为多次 direct sample 与多次 Vibe2Spec sample 的平均通过率、返工轮数和漏需求数量对比。
 
 ## 5. 项目意义
 
@@ -296,7 +345,7 @@ Artifact-only 模式能显著减少长上下文污染。每个阶段的新对话
 
 ### 5.5 对 Vibe Coding 的意义
 
-项目最后阶段不是直接写代码，而是生成监督 Agent 的 `doc/prompt.md`。这让前期规划和后期自动实现之间形成衔接：先把任务拆细、写入 `doc/tasks/progress.md`，再让监督 Agent 根据进度文件调度子 agents，实现多任务并行和进度回写。
+项目最后阶段不是直接写代码，而是生成轻量实现 prompt `doc/prompt.md`。这让前期规划和后期实现之间形成衔接：先把任务拆细、写入 `doc/tasks/progress.md`，再让 Codex 根据进度文件顺序实现、验证和回写；多 agent 并行只作为大任务下的可选策略。
 
 ### 5.6 对团队协作的意义
 
@@ -349,9 +398,9 @@ Artifact-only 模式能显著减少长上下文污染。每个阶段的新对话
 - 跳过已完成阶段。
 - 只重跑指定阶段。
 
-### 6.7 缺少并发和子 Agent 实际调度
+### 6.7 子 Agent 仍只是可选提示能力
 
-实现阶段会生成监督 Agent prompt，要求后续自动拉起多个子 agents，但当前 harness 自身不调度子 agents，也不跟踪子任务执行结果。也就是说，多 Agent 实现仍停留在 prompt 约束层，而不是 harness 的运行时能力。
+实现阶段现在默认生成单 agent 顺序执行 prompt，并只在任务独立、文件范围清晰且上下文明显过长时允许可选启用子 agents。当前 harness 自身仍不调度子 agents，也不跟踪子任务执行结果；多 Agent 实现仍停留在 prompt 约束层，而不是 harness 的运行时能力。
 
 如果要把它做成完整平台，需要增加任务队列、子进程管理、并发控制、结果合并、冲突处理和失败重试。
 
@@ -378,7 +427,7 @@ README 已覆盖使用方式，但项目层面的架构决策、取舍理由、�
 4. 引入结构化阶段状态输出，在当前独占行协议基础上进一步减少漏判。
 5. 明确 Codex conversation 隔离实现方式，必要时封装 Codex CLI 会话参数。
 6. 增加端到端 demo 项目，让用户看到完整 artifact 链。
-7. 增加文档化设计决策记录，解释为什么固定四阶段、为什么 artifact-only、为什么实现阶段只生成监督 prompt。
+7. 增加文档化设计决策记录，解释为什么固定四阶段、为什么 artifact-only、为什么实现阶段只生成轻量实现 prompt。
 8. 改进安全策略，例如在 execute 前预览即将运行的命令，或支持更细粒度的允许写入路径。
 9. 为轻量 skills 增加测试或同步校验，避免 skills 模板和默认 harness 配置长期漂移。
 
@@ -386,6 +435,6 @@ README 已覆盖使用方式，但项目层面的架构决策、取舍理由、�
 
 当前项目已经形成一个清晰的 0.1.0 版本：它用少量 Python 代码实现了四阶段 Codex CLI harness，具备配置解析、prompt 生成、上下文隔离、运行审计、产物校验、交互暂停、缺失产物重试、Python bootstrap 和基础 CI。
 
-它的优势是边界清楚、结构简单、工程约束强，适合把 AI coding 流程从临时聊天沉淀为可审阅的文档链路和运行记录。它的主要不足是验证仍偏浅、阶段扩展有限、conversation 隔离和多 Agent 调度还没有成为真实运行时能力。
+它的优势是边界清楚、结构简单、工程约束强，适合把 AI coding 流程从临时聊天沉淀为可审阅的文档链路和运行记录。它的主要不足是验证仍偏浅、阶段扩展有限、conversation 隔离和可选多 Agent 调度还没有成为真实运行时能力。
 
 总体看，这个项目已经适合作为 Vibe Coding 前置规划和 Codex CLI 阶段化执行的基础工具；下一阶段的关键是增强恢复能力、内容质量校验和真实端到端样例。

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vibe2Spec Proration Calculator</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #f5f6f8; color: #1f2937; }
+      main { width: min(880px, calc(100vw - 32px)); margin: 48px auto; background: #fff; border: 1px solid #d9dee8; border-radius: 8px; padding: 24px; }
+      h1 { margin-top: 0; }
+      form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      label { display: grid; gap: 6px; font-size: 14px; color: #4b5563; }
+      input { height: 38px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 10px; font: inherit; }
+      button { grid-column: 1 / -1; height: 42px; border: 0; border-radius: 6px; background: #0f766e; color: white; font: inherit; cursor: pointer; }
+      #result { margin-top: 18px; padding: 16px; border-radius: 8px; background: #ecfdf5; }
+      .error { background: #fff1f2 !important; color: #be123c; }
+      .amount { font-size: 28px; font-weight: 750; }
+      .meta { color: #4b5563; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Vibe2Spec Proration Calculator</h1>
+      <form id="calculator">
+        <label>Current monthly price <input id="current" type="number" value="100" step="0.01" /></label>
+        <label>New monthly price <input id="next" type="number" value="160" step="0.01" /></label>
+        <label>Billing start <input id="start" type="date" value="2026-02-01" /></label>
+        <label>Billing end <input id="end" type="date" value="2026-03-01" /></label>
+        <label>Change date <input id="change" type="date" value="2026-02-15" /></label>
+        <label>Coupon percent <input id="coupon" type="number" value="10" step="0.01" /></label>
+        <label>Tax percent <input id="tax" type="number" value="8.25" step="0.01" /></label>
+        <button type="submit">Calculate</button>
+      </form>
+      <div id="result">Enter values and calculate.</div>
+    </main>
+    <script>
+      const DAY_MS = 86400000;
+
+      function parseDateOnly(value) {
+        const parts = value.split("-").map(Number);
+        if (parts.length !== 3 || parts.some(Number.isNaN)) {
+          return Number.NaN;
+        }
+        return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+      }
+
+      function dayDiff(start, end) {
+        return Math.round((parseDateOnly(end) - parseDateOnly(start)) / DAY_MS);
+      }
+
+      function roundCents(value) {
+        return Math.round((value + Number.EPSILON) * 100) / 100;
+      }
+
+      function calculateProration(input) {
+        const periodDays = dayDiff(input.start, input.end);
+        const affectedDays = dayDiff(input.change, input.end);
+        const changeOffset = dayDiff(input.start, input.change);
+        if (!Number.isFinite(periodDays) || !Number.isFinite(affectedDays) || !Number.isFinite(changeOffset)) {
+          return { error: "Invalid date range" };
+        }
+        if (periodDays <= 0 || changeOffset < 0 || affectedDays <= 0) {
+          return { error: "Invalid date range" };
+        }
+        const delta = (input.next - input.current) * (affectedDays / periodDays);
+        const discounted = delta * (1 - input.coupon / 100);
+        const taxed = discounted * (1 + input.tax / 100);
+        const total = roundCents(taxed);
+        return {
+          total,
+          kind: total >= 0 ? "charge" : "refund",
+          periodDays,
+          affectedDays,
+        };
+      }
+
+      function readInput() {
+        return {
+          current: Number(document.querySelector("#current").value),
+          next: Number(document.querySelector("#next").value),
+          start: document.querySelector("#start").value,
+          end: document.querySelector("#end").value,
+          change: document.querySelector("#change").value,
+          coupon: Number(document.querySelector("#coupon").value),
+          tax: Number(document.querySelector("#tax").value),
+        };
+      }
+
+      function render(output) {
+        const target = document.querySelector("#result");
+        if (output.error) {
+          target.className = "error";
+          target.textContent = output.error;
+          return;
+        }
+        target.className = "";
+        target.innerHTML = `<div class="amount">${output.kind === "charge" ? "Charge" : "Refund"} $${Math.abs(output.total).toFixed(2)}</div><div class="meta">${output.affectedDays}/${output.periodDays} billing days affected</div>`;
+      }
+
+      document.querySelector("#calculator").addEventListener("submit", (event) => {
+        event.preventDefault();
+        render(calculateProration(readInput()));
+      });
+
+      window.calculateProration = calculateProration;
+    </script>
+  </body>
+</html>

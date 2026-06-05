@@ -1,6 +1,6 @@
 ---
 name: expand-implementation-prompt
-description: Expand planning artifacts into a complete Chinese implementation prompt for Codex. Use when the user says 实现 prompt, 开发 prompt, vibe coding prompt, 编码执行, or wants a lightweight prompt that tells Codex to read doc/proposal.md, doc/detailed-design.md, and doc/tasks, implement the project, update checklists, run tests, and report verification without using codex-agent-harness.
+description: Expand planning artifacts into a complete Chinese lightweight implementation prompt for Codex. Use when the user says 实现 prompt, 开发 prompt, vibe coding prompt, 编码执行, or wants a prompt that tells Codex to read Spec-first planning docs, implement mostly as a single agent, update checklists, run tests, and report verification without using codex-agent-harness.
 ---
 
 # Expand Implementation Prompt
@@ -26,7 +26,7 @@ Return only the expanded prompt, preferably in a fenced `text` block. Include th
 ## Implementation Prompt Template
 
 ```text
-你是一个资深全栈工程师和实现监督 agent。请基于现有规划文档完成项目实现，直到功能可运行、测试通过、任务清单更新。
+你是一个资深全栈工程师。请基于现有规划文档完成项目实现，直到功能可运行、测试通过、任务清单更新。
 
 目标：
 实现 [项目名称或用户目标] 的 MVP。
@@ -45,6 +45,8 @@ Return only the expanded prompt, preferably in a fenced `text` block. Include th
 4. 严格按任务 checklist 推进，每完成一项就更新对应任务文件和 progress.md。
 5. 对任务中的不明确点，能从需求/设计推断的采用保守 MVP 实现；会影响数据安全、费用、外部服务或产品承诺的先向用户提问。
 6. 不要引入无必要的大型框架或复杂抽象。
+7. 默认单 agent 顺序执行。只有当任务彼此独立、文件范围清晰、上下文会明显过长时，才可以选择性使用子 agents；不要为了形式强行并行。
+8. 实现必须遵守 Spec / ADR / Acceptance Criteria；如果实现偏离文档，必须回填相关文档或记录偏离原因。
 
 实现步骤：
 1. 建立或修正项目基础结构、配置和运行脚本。
@@ -54,6 +56,7 @@ Return only the expanded prompt, preferably in a fenced `text` block. Include th
 5. 实现权限、隐私、安全、审计、免责声明或风险提示等设计要求。
 6. 补充必要的单元测试、集成测试或端到端验证。
 7. 运行格式化、lint、类型检查和测试；根据项目实际工具选择命令。
+8. 如修改了关键行为、schema、API 或跨模块契约，回填 doc/proposal.md、doc/detailed-design.md 或 doc/specs/ 中相关内容。
 
 测试与验证：
 - 如果是 Python 项目，优先运行：uv run pytest、uv run mypy、uv run ruff check .
@@ -73,4 +76,5 @@ Return only the expanded prompt, preferably in a fenced `text` block. Include th
 3. 运行了哪些验证命令及结果
 4. 仍然存在的风险或未完成项
 5. 本地运行方式
+6. Spec 回填或实现偏离记录
 ```

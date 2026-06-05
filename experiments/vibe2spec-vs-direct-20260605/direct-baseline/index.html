@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Direct Deadline Todo</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f4f6f8;
+        color: #1d2430;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(760px, calc(100vw - 32px));
+        padding: 24px;
+        border: 1px solid #d8dee8;
+        border-radius: 8px;
+        background: white;
+      }
+
+      h1 {
+        margin-top: 0;
+      }
+
+      form {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      input,
+      button {
+        height: 40px;
+        box-sizing: border-box;
+        border-radius: 6px;
+        font: inherit;
+      }
+
+      input {
+        border: 1px solid #ccd3df;
+        padding: 0 10px;
+      }
+
+      #title-input {
+        flex: 1 1 280px;
+      }
+
+      button {
+        border: 0;
+        background: #2563eb;
+        color: white;
+        padding: 0 14px;
+      }
+
+      .secondary {
+        background: #e8edf5;
+        color: #273244;
+      }
+
+      #error {
+        width: 100%;
+        min-height: 20px;
+        color: #b42318;
+      }
+
+      #summary {
+        color: #536174;
+      }
+
+      ul {
+        padding: 0;
+        list-style: none;
+      }
+
+      li {
+        display: grid;
+        grid-template-columns: auto 1fr auto auto;
+        gap: 10px;
+        align-items: center;
+        padding: 10px;
+        border: 1px solid #d8dee8;
+        border-radius: 8px;
+        margin-bottom: 8px;
+      }
+
+      li.overdue {
+        border-color: #f0a099;
+        background: #fff7f6;
+      }
+
+      .done {
+        color: #778295;
+        text-decoration: line-through;
+      }
+
+      .meta {
+        color: #657184;
+        font-size: 13px;
+      }
+
+      .badge {
+        color: #b42318;
+        background: #fee4e2;
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 12px;
+      }
+
+      #empty-state {
+        border: 1px dashed #cbd3df;
+        border-radius: 8px;
+        padding: 18px;
+        color: #657184;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Direct Deadline Todo</h1>
+      <form id="todo-form">
+        <input id="title-input" placeholder="Task title" />
+        <input id="due-input" type="date" />
+        <button>Add</button>
+        <div id="error"></div>
+      </form>
+      <p id="summary"></p>
+      <ul id="todo-list"></ul>
+      <div id="empty-state">No tasks yet.</div>
+    </main>
+
+    <script>
+      const storageKey = "direct-deadline-todos";
+      const form = document.querySelector("#todo-form");
+      const titleInput = document.querySelector("#title-input");
+      const dueInput = document.querySelector("#due-input");
+      const error = document.querySelector("#error");
+      const summary = document.querySelector("#summary");
+      const list = document.querySelector("#todo-list");
+      const emptyState = document.querySelector("#empty-state");
+
+      let todos = loadTodos();
+
+      function todayString() {
+        return new Date().toISOString().slice(0, 10);
+      }
+
+      function loadTodos() {
+        try {
+          return JSON.parse(localStorage.getItem(storageKey) || "[]");
+        } catch {
+          return [];
+        }
+      }
+
+      function saveTodos() {
+        localStorage.setItem(storageKey, JSON.stringify(todos));
+      }
+
+      function isOverdue(todo, today = todayString()) {
+        if (!todo.dueDate || todo.completed) {
+          return false;
+        }
+        return todo.dueDate < today;
+      }
+
+      function addTodo(title, dueDate) {
+        todos.push({
+          id: String(Date.now()),
+          title,
+          dueDate,
+          completed: false,
+        });
+        saveTodos();
+        render();
+      }
+
+      function toggleTodo(id) {
+        todos = todos.map((todo) => {
+          if (todo.id !== id) return todo;
+          return { ...todo, completed: !todo.completed };
+        });
+        saveTodos();
+        render();
+      }
+
+      function deleteTodo(id) {
+        todos = todos.filter((todo) => todo.id !== id);
+        saveTodos();
+        render();
+      }
+
+      function render() {
+        list.innerHTML = "";
+        const overdue = todos.filter((todo) => isOverdue(todo)).length;
+        summary.textContent = `${todos.length} task(s), ${overdue} overdue`;
+        emptyState.hidden = todos.length > 0;
+
+        for (const todo of todos) {
+          const item = document.createElement("li");
+          if (isOverdue(todo)) item.className = "overdue";
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = todo.completed;
+          checkbox.addEventListener("change", () => toggleTodo(todo.id));
+
+          const title = document.createElement("div");
+          title.textContent = todo.title;
+          if (todo.completed) title.className = "done";
+
+          const meta = document.createElement("div");
+          meta.className = "meta";
+          meta.textContent = todo.dueDate ? `Due ${todo.dueDate}` : "No due date";
+
+          item.append(checkbox, title, meta);
+          if (isOverdue(todo)) {
+            const badge = document.createElement("span");
+            badge.className = "badge";
+            badge.textContent = "Overdue";
+            item.append(badge);
+          }
+
+          const remove = document.createElement("button");
+          remove.className = "secondary";
+          remove.textContent = "Delete";
+          remove.addEventListener("click", () => deleteTodo(todo.id));
+          item.append(remove);
+          list.append(item);
+        }
+      }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const title = titleInput.value.trim();
+        if (!title) {
+          error.textContent = "Task title is required.";
+          return;
+        }
+        error.textContent = "";
+        addTodo(title, dueInput.value);
+        titleInput.value = "";
+        dueInput.value = "";
+      });
+
+      render();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+已完成设计阶段 artifact：[doc/detailed-design.md](/Users/bytedance/Documents/Programs/Vibe2Spec/experiments/web-harness-vs-direct-20260603/harness-flow/doc/detailed-design.md)。
+
+文档已覆盖 `目标`、`输入`、`输出`、`步骤`，并纳入已确认决策：导入替换、接受数组或 `{ tasks: [...] }`、删除不二次确认、负责人筛选自动生成且包含 `All`、完成百分比按 done 任务数计算。
+
+未修改业务代码，未生成任务清单；本阶段没有需要继续询问的阻塞问题。

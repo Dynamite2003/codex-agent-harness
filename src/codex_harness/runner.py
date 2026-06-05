@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .artifact_validation import ArtifactValidationIssue, validate_paths
 from .config import HarnessConfig, Phase
 from .prompting import build_prompt
 
@@ -24,6 +25,7 @@ class PhaseRun:
     command: list[str]
     prompt_stdin: bool
     expected_outputs: list[Path]
+    validate_artifacts: bool
 
 
 class PhaseNeedsUserInputError(RuntimeError):
@@ -35,6 +37,10 @@ class PhaseOutputMissingError(RuntimeError):
 
 
 class PhaseCommandFailedError(RuntimeError):
+    pass
+
+
+class PhaseArtifactInvalidError(RuntimeError):
     pass
 
 
@@ -152,6 +158,7 @@ def _write_run_manifest(
                 "command": item.command,
                 "prompt_stdin": item.prompt_stdin,
                 "expected_outputs": [str(path) for path in item.expected_outputs],
+                "validate_artifacts": item.validate_artifacts,
             }
             for item in phase_runs
         ],
@@ -219,6 +226,7 @@ def _prepare_phase(
                     "artifact_only_context": config.isolation.artifact_only_context,
                 },
                 "prompt_shape": ["目标", "输入", "输出", "步骤"],
+                "validate_artifacts": _should_validate_artifacts(prompt),
             },
             indent=2,
             ensure_ascii=False,
@@ -243,6 +251,7 @@ def _prepare_phase(
         command=command,
         prompt_stdin=prompt_stdin,
         expected_outputs=expected_outputs,
+        validate_artifacts=_should_validate_artifacts(prompt),
     )
 
 
@@ -261,6 +270,8 @@ def _execute_phase_until_outputs_exist(
         )
         missing = _missing_phase_outputs(phase_run)
         if not missing:
+            if phase_run.validate_artifacts:
+                _validate_phase_outputs(phase_run, project_root=cwd)
             _write_phase_status(phase_run, ok=True)
             return
         if output_missing_provider is None:
@@ -445,10 +456,13 @@ def _detect_user_input_request(output: str) -> str | None:
     return None
 
 
-def _validate_phase_outputs(phase_run: PhaseRun) -> None:
+def _validate_phase_outputs(phase_run: PhaseRun, *, project_root: Path) -> None:
     missing = _missing_phase_outputs(phase_run)
     if missing:
         _stop_for_missing_outputs(phase_run, missing)
+    issues = validate_paths(phase_run.expected_outputs, project_root=project_root)
+    if issues:
+        _stop_for_invalid_artifacts(phase_run, issues)
 
 
 def _missing_phase_outputs(phase_run: PhaseRun) -> list[Path]:
@@ -466,6 +480,20 @@ def _stop_for_missing_outputs(phase_run: PhaseRun, missing: list[Path]) -> None:
     )
 
 
+def _stop_for_invalid_artifacts(
+    phase_run: PhaseRun,
+    issues: list[ArtifactValidationIssue],
+) -> None:
+    _write_phase_status(phase_run, ok=False, validation_issues=issues)
+    formatted = "\n".join(f"- {issue.path}: {issue.message}" for issue in issues)
+    raise PhaseArtifactInvalidError(
+        f"Phase '{phase_run.phase_id}' produced artifacts that failed content validation:\n"
+        f"{formatted}\n"
+        f"Full stdout: {phase_run.stdout_file}\n"
+        f"Full stderr: {phase_run.stderr_file}"
+    )
+
+
 def _write_phase_status(
     phase_run: PhaseRun,
     *,
@@ -475,6 +503,7 @@ def _write_phase_status(
     skipped: bool = False,
     command_failed: bool = False,
     returncode: int | None = None,
+    validation_issues: list[ArtifactValidationIssue] | None = None,
 ) -> None:
     status_file = phase_run.prompt_file.parent / "status.json"
     status_file.write_text(
@@ -488,7 +517,13 @@ def _write_phase_status(
                 "returncode": returncode,
                 "needs_user_input_file": str(phase_run.needs_user_input_file) if needs_user_input else None,
                 "expected_outputs": [str(path) for path in phase_run.expected_outputs],
+                "validate_artifacts": phase_run.validate_artifacts,
                 "missing_outputs": [str(path) for path in missing or []],
+                "artifact_invalid": bool(validation_issues),
+                "validation_issues": [
+                    {"path": str(issue.path), "message": issue.message}
+                    for issue in validation_issues or []
+                ],
                 "stdout_file": str(phase_run.stdout_file),
                 "stderr_file": str(phase_run.stderr_file),
             },
@@ -507,6 +542,20 @@ def _resolve_context_files(project_root: Path, inputs: list[str]) -> list[Path]:
         if candidate.exists():
             resolved.append(candidate)
     return resolved
+
+
+def _should_validate_artifacts(prompt: str) -> bool:
+    lowered = prompt.lower()
+    return any(
+        token in lowered
+        for token in [
+            "spec-first",
+            "functional requirements (ears)",
+            "key decisions / adr",
+            "acceptance criteria",
+            "given-when-then",
+        ]
+    )
 
 
 def _resolve_context_path(project_root: Path, item: str) -> Path:

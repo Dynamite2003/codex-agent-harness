@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sprint Board Lite 对比截图</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --ink: #17202a;
+        --muted: #5f6b7a;
+        --line: #d7dee8;
+        --blue: #2563eb;
+        --green: #047857;
+        --red: #b42318;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 28px;
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: var(--bg);
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      .page {
+        max-width: 1440px;
+        margin: 0 auto;
+      }
+
+      .header {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .header p {
+        max-width: 980px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin: 18px 0;
+      }
+
+      .summary div {
+        min-height: 84px;
+        padding: 12px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .summary b {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .summary span {
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin-bottom: 22px;
+      }
+
+      .shot {
+        overflow: hidden;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .shot header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .shot h2 {
+        font-size: 1rem;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 2px 8px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        border-radius: 999px;
+      }
+
+      .badge.good {
+        color: var(--green);
+        background: #ecfdf3;
+      }
+
+      .badge.warn {
+        color: #92400e;
+        background: #fff7ed;
+      }
+
+      .badge.bad {
+        color: var(--red);
+        background: #fee4e2;
+      }
+
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .note {
+        padding: 12px 14px;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.45;
+        border-top: 1px solid var(--line);
+      }
+
+      .mobile-row {
+        align-items: start;
+      }
+
+      .mobile-row .shot img {
+        width: 56%;
+        margin: 0 auto;
+        background: #ffffff;
+        border-left: 1px solid var(--line);
+        border-right: 1px solid var(--line);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="header">
+        <h1>Sprint Board Lite: Direct Codex vs Harness Flow</h1>
+        <p>
+          四张图均由本机 Chrome headless 真实渲染生成，不是手工 mock。桌面端展示完整首屏；
+          移动端使用 390x900 视口，用于观察响应式和横向溢出。
+        </p>
+      </section>
+
+      <section class="summary" aria-label="结论摘要">
+        <div>
+          <b>功能完整性</b>
+          <span>两组都实现了核心任务、筛选、状态流转、本地保存、JSON 导入导出。</span>
+        </div>
+        <div>
+          <b>桌面设计</b>
+          <span>harness 信息架构更像工作台；direct 更像左侧工具栏加看板。</span>
+        </div>
+        <div>
+          <b>移动端</b>
+          <span>两组都有裁切/溢出迹象，不能判定为移动端体验合格。</span>
+        </div>
+        <div>
+          <b>工程过程</b>
+          <span>harness 可追踪性更强，但成本和误触发问题明显更高。</span>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="shot">
+          <header>
+            <h2>Direct: 桌面端</h2>
+            <span class="badge warn">功能可用，布局较普通</span>
+          </header>
+          <img src="screenshots/direct-desktop.png" alt="Direct desktop screenshot" />
+          <p class="note">
+            左侧工具区纵向堆叠，JSON 区在首屏底部被截断；看板区域可用但页面右下留白明显。
+          </p>
+        </article>
+
+        <article class="shot">
+          <header>
+            <h2>Harness: 桌面端</h2>
+            <span class="badge good">信息架构更清楚</span>
+          </header>
+          <img src="screenshots/harness-desktop.png" alt="Harness desktop screenshot" />
+          <p class="note">
+            表单、筛选、导入导出组成顶部工作区，看板独占下方区域；视觉层次和扫描效率更好。
+          </p>
+        </article>
+      </section>
+
+      <section class="grid mobile-row">
+        <article class="shot">
+          <header>
+            <h2>Direct: 移动端</h2>
+            <span class="badge bad">横向溢出</span>
+          </header>
+          <img src="screenshots/direct-mobile.png" alt="Direct mobile screenshot" />
+          <p class="note">
+            KPI 仍保持两列，右侧内容被视口裁切；表单也偏宽，移动端首屏可用性不足。
+          </p>
+        </article>
+
+        <article class="shot">
+          <header>
+            <h2>Harness: 移动端</h2>
+            <span class="badge bad">仍有裁切</span>
+          </header>
+          <img src="screenshots/harness-mobile.png" alt="Harness mobile screenshot" />
+          <p class="note">
+            KPI 已变为单列，但表单控件仍有右侧裁切迹象；响应式策略还没有真正闭环。
+          </p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

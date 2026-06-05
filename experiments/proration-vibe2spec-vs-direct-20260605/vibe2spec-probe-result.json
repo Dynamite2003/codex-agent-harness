@@ -1,0 +1,52 @@
+{
+  "target": "/Users/bytedance/Documents/Programs/Vibe2Spec/experiments/proration-vibe2spec-vs-direct-20260605/vibe2spec/index.html",
+  "passed": 6,
+  "total": 6,
+  "checks": [
+    {
+      "name": "exposes calculateProration",
+      "ok": true
+    },
+    {
+      "name": "does not use fixed 30-day billing period",
+      "ok": true
+    },
+    {
+      "name": "february 2026 coupon tax",
+      "ok": true,
+      "actual": {
+        "total": 29.23,
+        "kind": "charge",
+        "periodDays": 28,
+        "affectedDays": 14
+      }
+    },
+    {
+      "name": "leap year february",
+      "ok": true,
+      "actual": {
+        "total": 31.03,
+        "kind": "charge",
+        "periodDays": 29,
+        "affectedDays": 15
+      }
+    },
+    {
+      "name": "downgrade refund",
+      "ok": true,
+      "actual": {
+        "total": -30.97,
+        "kind": "refund",
+        "periodDays": 31,
+        "affectedDays": 16
+      }
+    },
+    {
+      "name": "invalid end before start",
+      "ok": true,
+      "actual": {
+        "error": "Invalid date range"
+      }
+    }
+  ]
+}

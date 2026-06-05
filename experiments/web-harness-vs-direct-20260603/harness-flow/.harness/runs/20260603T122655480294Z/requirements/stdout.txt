@@ -1,0 +1,5 @@
+已完成需求阶段，只新增了 [doc/proposal.md](/Users/bytedance/Documents/Programs/Vibe2Spec/experiments/web-harness-vs-direct-20260603/harness-flow/doc/proposal.md)。
+
+我已阅读现有 scaffold 和 `tests/test_static_contract.py`，文档覆盖了背景、目标、非目标、使用场景、功能需求、约束、步骤和待确认问题。当前信息足够进入设计阶段，未触发阻塞性用户输入。
+
+未运行实现测试，因为本阶段明确不做设计、任务拆分或代码实现。

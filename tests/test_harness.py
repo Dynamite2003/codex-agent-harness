@@ -14,6 +14,7 @@ from codex_harness.python_bootstrap import bootstrap_python_project
 from codex_harness.runner import (
     FORCE_NEXT_PHASE,
     SKIP_PHASE,
+    PhaseArtifactInvalidError,
     PhaseCommandFailedError,
     PhaseNeedsUserInputError,
     PhaseOutputMissingError,
@@ -46,6 +47,41 @@ class HarnessTests(unittest.TestCase):
 
             self.assertEqual(result, 0)
             self.assertTrue((root / ".harness" / "runs").exists())
+
+    def test_init_skill_flow_installs_skills_and_quickstart(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            codex_home = Path(tmp) / "codex-home"
+
+            result = main(["init-skill-flow", "--path", str(root), "--codex-home", str(codex_home)])
+
+            self.assertEqual(result, 0)
+            self.assertTrue((codex_home / "skills" / "vibe2spec-flow" / "SKILL.md").exists())
+            self.assertTrue((codex_home / "skills" / "expand-requirements-prompt" / "SKILL.md").exists())
+            self.assertTrue((root / "doc" / "specs").is_dir())
+            self.assertTrue((root / "doc" / "tasks").is_dir())
+            quickstart = (root / "doc" / "vibe2spec-quickstart.md").read_text(encoding="utf-8")
+            self.assertIn("$vibe2spec-flow", quickstart)
+
+    def test_validate_artifacts_reports_missing_spec_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            doc = root / "doc"
+            doc.mkdir()
+            (doc / "proposal.md").write_text("# Proposal\n\n功能正常。\n", encoding="utf-8")
+
+            result = main(["validate-artifacts", "-C", str(root)])
+
+            self.assertEqual(result, 1)
+
+    def test_validate_artifacts_accepts_spec_first_docs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_valid_artifacts(root)
+
+            result = main(["validate-artifacts", "-C", str(root)])
+
+            self.assertEqual(result, 0)
 
     def test_create_run_writes_phase_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -390,9 +426,28 @@ class HarnessTests(unittest.TestCase):
             self.assertIn("doc/tasks/<module-name>.md", prompt)
             self.assertIn("doc/tasks/progress.md", prompt)
             self.assertIn("用 checklist 表示子任务是否完成", prompt)
+            self.assertIn("AFK/HITL", prompt)
+            self.assertIn("每个任务必须能追溯到 EARS 需求、ADR 或 Acceptance Criteria", prompt)
             self.assertEqual(context["context_inputs"], ["doc/proposal.md", "doc/detailed-design.md"])
 
-    def test_default_implementation_prompt_generates_supervisor_prompt(self) -> None:
+    def test_default_requirements_and_design_prompts_use_spec_first_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = load_config(Path("examples/basic.harness.json"))
+
+            run = create_run(config=config, user_goal="Build a Python project.", project_root=root)
+            requirements_prompt = run.phases[0].prompt_file.read_text(encoding="utf-8")
+            design_prompt = run.phases[1].prompt_file.read_text(encoding="utf-8")
+
+            self.assertIn("Spec-first 需求文档", requirements_prompt)
+            self.assertIn("Functional Requirements (EARS)", requirements_prompt)
+            self.assertIn("Key Decisions / ADR Candidates", requirements_prompt)
+            self.assertIn("Acceptance Criteria (GIVEN-WHEN-THEN)", requirements_prompt)
+            self.assertIn("doc/specs/index.md", requirements_prompt)
+            self.assertIn("Key Design Decisions (ADR)", design_prompt)
+            self.assertIn("需要回填的 spec 文件", design_prompt)
+
+    def test_default_implementation_prompt_generates_lightweight_sequential_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config = load_config(Path("examples/basic.harness.json"))
@@ -403,14 +458,15 @@ class HarnessTests(unittest.TestCase):
 
             self.assertIn("生成 Vibe Coding 用的 prompt", prompt)
             self.assertIn("doc/prompt.md", prompt)
-            self.assertIn("监督 Agent 跟踪整体进度", prompt)
+            self.assertIn("默认采用单 agent 顺序执行", prompt)
             self.assertIn("doc/tasks/progress.md", prompt)
-            self.assertIn("自动拉起多个子 agents", prompt)
+            self.assertIn("不得强制并行或强制开启多个 subagents", prompt)
             self.assertIn("按项目技术栈补充 focused tests 或等价验证", prompt)
             self.assertIn("先识别现有技术栈和可用工具", prompt)
             self.assertIn("不要为静态 Web、无依赖项目或已有项目强行引入不存在的 uv", prompt)
             self.assertIn("静态 Web 或无依赖前端项目至少做契约测试", prompt)
-            self.assertIn("明确文件所有权和合并顺序", prompt)
+            self.assertIn("遵守 Spec / ADR / Acceptance Criteria", prompt)
+            self.assertIn("spec 回填或偏离记录", prompt)
             self.assertEqual(
                 context["context_inputs"],
                 ["doc/proposal.md", "doc/detailed-design.md", "doc/tasks"],
@@ -425,11 +481,11 @@ class HarnessTests(unittest.TestCase):
                 "doc=root/'doc'; "
                 "tasks=doc/'tasks'; "
                 "tasks.mkdir(parents=True, exist_ok=True); "
-                "(doc/'proposal.md').write_text('proposal\\n', encoding='utf-8'); "
-                "(doc/'detailed-design.md').write_text('design\\n', encoding='utf-8'); "
-                "(tasks/'core.md').write_text('- [x] core\\n', encoding='utf-8'); "
-                "(tasks/'progress.md').write_text('- [x] core\\n', encoding='utf-8'); "
-                "(doc/'prompt.md').write_text('supervisor prompt\\n', encoding='utf-8')"
+                "(doc/'proposal.md').write_text('# Proposal\\n\\n## Context\\nWhy.\\n\\n## Goals & Non-Goals\\n目标和非目标。\\n\\n## Functional Requirements (EARS)\\nWHEN user acts THE SYSTEM SHALL respond.\\n\\n## ADR Candidates\\nDecision: simple. Why: MVP.\\n\\n## Acceptance Criteria\\nGIVEN state WHEN action THEN result.\\n\\n## Out of Scope\\n不做支付。\\n', encoding='utf-8'); "
+                "(doc/'detailed-design.md').write_text('# Design\\n\\n## 模块\\nmodule core.\\n\\n## API 契约\\napi contract.\\n\\n## ADR\\nDecision: simple. Why: MVP.\\n\\n## Acceptance Mapping\\nGIVEN state WHEN action THEN result.\\n\\n## Test Strategy\\n测试验证。\\n', encoding='utf-8'); "
+                "(tasks/'core.md').write_text('# Core Tasks\\n\\n## Checklist\\n- [x] 实现 core\\n\\n## Traceability\\nEARS / ADR / Acceptance.\\n\\n## AFK/HITL\\nAFK.\\n\\n## Test Requirements\\n测试验证。\\n\\n## File Scope\\n文件 src/core.py。\\n', encoding='utf-8'); "
+                "(tasks/'progress.md').write_text('# Progress\\n\\n## 顺序和阻塞\\nBlocked: none.\\n\\n- [x] core\\n', encoding='utf-8'); "
+                "(doc/'prompt.md').write_text('# Prompt\\n\\nRead doc/tasks/progress.md. Follow Spec ADR Acceptance. Run test 验证.\\n', encoding='utf-8')"
             )
             config = parse_config(
                 {
@@ -442,7 +498,7 @@ class HarnessTests(unittest.TestCase):
                             "title": "Requirements",
                             "goal": "Requirements.",
                             "input": "None.",
-                            "output": "Write docs.",
+                            "output": "Write Spec-first docs with Functional Requirements (EARS), Key Decisions / ADR, and Acceptance Criteria.",
                             "steps": "Ask.",
                             "expected_outputs": ["doc/proposal.md"],
                         },
@@ -489,6 +545,68 @@ class HarnessTests(unittest.TestCase):
             self.assertTrue((root / "doc" / "prompt.md").exists())
             self.assertTrue(status["ok"])
             self.assertEqual(status["missing_outputs"], [])
+            self.assertFalse(status["artifact_invalid"])
+
+    def test_execute_stops_when_artifact_content_is_invalid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_codex = (
+                "from pathlib import Path; "
+                "root=Path('{project_root}'); "
+                "doc=root/'doc'; "
+                "doc.mkdir(parents=True, exist_ok=True); "
+                "(doc/'proposal.md').write_text('proposal only\\n', encoding='utf-8')"
+            )
+            config = parse_config(
+                {
+                    "project_name": "test",
+                    "workspace": ".harness",
+                    "codex": {"command": ["python3", "-c", fake_codex]},
+                    "phases": [
+                        {
+                            "id": "requirements",
+                            "title": "Requirements",
+                            "goal": "Requirements.",
+                            "input": "None.",
+                            "output": "Write Spec-first docs with Functional Requirements (EARS), Key Decisions / ADR, and Acceptance Criteria.",
+                            "steps": "Ask.",
+                            "expected_outputs": ["doc/proposal.md"],
+                        },
+                        {
+                            "id": "design",
+                            "title": "Design",
+                            "goal": "Design.",
+                            "input": "Context.",
+                            "output": "Write design.",
+                            "steps": "Read.",
+                        },
+                        {
+                            "id": "tasks",
+                            "title": "Tasks",
+                            "goal": "Tasks.",
+                            "input": "Context.",
+                            "output": "Write tasks.",
+                            "steps": "Split.",
+                        },
+                        {
+                            "id": "implementation",
+                            "title": "Implementation",
+                            "goal": "Prompt.",
+                            "input": "Context.",
+                            "output": "Write prompt.",
+                            "steps": "Generate.",
+                        },
+                    ],
+                }
+            )
+
+            with self.assertRaises(PhaseArtifactInvalidError):
+                create_run(config=config, user_goal="Goal", project_root=root, execute=True)
+
+            run_dir = next((root / ".harness" / "runs").iterdir())
+            status = json.loads((run_dir / "requirements" / "status.json").read_text())
+            self.assertTrue(status["artifact_invalid"])
+            self.assertGreater(len(status["validation_issues"]), 0)
 
     def test_execute_stops_when_phase_requests_user_input(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1202,7 +1320,7 @@ class HarnessTests(unittest.TestCase):
                 "doc=root/'doc'; "
                 "doc.mkdir(exist_ok=True); "
                 "target=doc/'proposal.md' if phase == 'requirements' else doc/(phase + '.txt'); "
-                "target.write_text(sys.stdin.read(), encoding='utf-8')"
+                "target.write_text(sys.stdin.read() + '\\n## Context\\nContext.\\n\\n## Goals & Non-Goals\\n目标和非目标。\\n\\n## Functional Requirements (EARS)\\nWHEN user acts THE SYSTEM SHALL respond.\\n\\n## ADR Candidates\\nDecision: simple. Why: MVP.\\n\\n## Acceptance Criteria\\nGIVEN state WHEN action THEN result.\\n\\n## Out of Scope\\n不做支付。\\n', encoding='utf-8')"
             )
             config = parse_config(
                 {
@@ -1252,6 +1370,48 @@ class HarnessTests(unittest.TestCase):
             proposal = (root / "doc" / "proposal.md").read_text(encoding="utf-8")
             self.assertIn("Need Stdin feature.", proposal)
             self.assertTrue(run.phases[0].prompt_stdin)
+
+
+def _write_valid_artifacts(root: Path) -> None:
+    doc = root / "doc"
+    tasks = doc / "tasks"
+    tasks.mkdir(parents=True)
+    (doc / "proposal.md").write_text(
+        "# Proposal\n\n"
+        "## Context\nContext.\n\n"
+        "## Goals & Non-Goals\n目标和非目标。\n\n"
+        "## Functional Requirements (EARS)\nWHEN user acts THE SYSTEM SHALL respond.\n\n"
+        "## ADR Candidates\nDecision: simple. Why: MVP.\n\n"
+        "## Acceptance Criteria\nGIVEN state WHEN action THEN result.\n\n"
+        "## Out of Scope\n不做支付。\n",
+        encoding="utf-8",
+    )
+    (doc / "detailed-design.md").write_text(
+        "# Design\n\n"
+        "## 模块\nmodule core.\n\n"
+        "## API 契约\napi contract.\n\n"
+        "## ADR\nDecision: simple. Why: MVP.\n\n"
+        "## Acceptance Mapping\nGIVEN state WHEN action THEN result.\n\n"
+        "## Test Strategy\n测试验证。\n",
+        encoding="utf-8",
+    )
+    (tasks / "progress.md").write_text(
+        "# Progress\n\n## 顺序和阻塞\nBlocked: none.\n\n- [x] core\n",
+        encoding="utf-8",
+    )
+    (tasks / "core.md").write_text(
+        "# Core Tasks\n\n"
+        "## Checklist\n- [x] 实现 core\n\n"
+        "## Traceability\nEARS / ADR / Acceptance.\n\n"
+        "## AFK/HITL\nAFK.\n\n"
+        "## Test Requirements\n测试验证。\n\n"
+        "## File Scope\n文件 src/core.py。\n",
+        encoding="utf-8",
+    )
+    (doc / "prompt.md").write_text(
+        "# Prompt\n\nRead doc/tasks/progress.md. Follow Spec ADR Acceptance. Run test 验证.\n",
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":

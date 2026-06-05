@@ -1,6 +1,6 @@
 ---
 name: expand-tasks-prompt
-description: Expand requirements and design artifacts into a complete Chinese task-breakdown prompt for Codex. Use when the user says 任务 prompt, 任务拆分, task breakdown, progress.md, or wants Codex to create doc/tasks/progress.md and per-module task checklists from doc/proposal.md and doc/detailed-design.md without running a full harness.
+description: Expand requirements and design artifacts into a complete Chinese Spec-traceable task-breakdown prompt for Codex. Use when the user says 任务 prompt, 任务拆分, task breakdown, progress.md, AFK/HITL, or wants Codex to create doc/tasks/progress.md and per-module task checklists from doc/proposal.md and doc/detailed-design.md without running a full harness.
 ---
 
 # Expand Tasks Prompt
@@ -45,24 +45,31 @@ Return only the expanded prompt, preferably in a fenced `text` block. Include th
 2. 依赖输入
 3. 不做什么
 4. 任务 checklist
-5. 验收标准
-6. 测试要求
-7. 风险和注意事项
+5. 追溯关系：对应 EARS / ADR / Acceptance Criteria
+6. 验收标准
+7. 测试要求
+8. AFK/HITL 标记
+9. Blocked by
+10. 可能修改的文件范围
+11. 风险和注意事项
 
 步骤：
-1. 阅读需求和设计文档，识别模块边界、依赖关系和可并行工作。
+1. 阅读需求和设计文档，识别模块边界、依赖关系、验收标准和可并行工作。
 2. 为每个模块创建一个清晰的任务文件，文件名使用英文小写短横线。
 3. 将任务拆到 0.5-2 小时内可完成的粒度；每个任务必须有明确产出。
 4. 在 progress.md 中列出模块总览、推荐执行顺序、可并行项和阻塞项。
-5. 对跨模块依赖、数据库迁移、外部服务、环境变量、测试数据和验收方式单独列明。
-6. 如发现需求或设计存在阻塞矛盾，先向用户提问；否则记录为待确认并继续拆分。
-7. 不要修改业务代码，不要安装依赖，不要启动服务。
+5. 每个任务必须能追溯到 EARS 需求、ADR 或 Acceptance Criteria；无法追溯的任务要说明为什么必要。
+6. 用 AFK 标记可由 agent 独立完成的任务；用 HITL 标记需要人工确认、密钥、外部账号、产品决策或高风险操作的任务。
+7. 对跨模块依赖、数据库迁移、外部服务、环境变量、测试数据和验收方式单独列明。
+8. 如发现需求或设计存在阻塞矛盾，先向用户提问；否则记录为待确认并继续拆分。
+9. 不要修改业务代码，不要安装依赖，不要启动服务。
 
 任务粒度规则：
 - 每个 checklist 项必须以动词开头，例如“实现...”“补充...”“验证...”。
 - 每个任务必须能被测试或人工验收。
 - 不要写“优化体验”“完善功能”这类不可验收任务，除非拆成具体行为。
 - 优先把基础设施、数据模型、核心流程、测试、错误状态和文档分开。
+- 优先垂直切片，保证每个切片有端到端可观察结果；只有基础设施或共享模块才按技术层拆分。
 
 质量要求：
 - 任务清单要能直接交给实现 agent 执行。

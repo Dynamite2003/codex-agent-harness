@@ -1,0 +1,153 @@
+{
+  "project_name": "example-project",
+  "workspace": ".harness",
+  "codex": {
+    "command": [
+      "codex",
+      "exec",
+      "--sandbox",
+      "workspace-write",
+      "--skip-git-repo-check",
+      "{prompt_stdin}"
+    ]
+  },
+  "isolation": {
+    "new_conversation_per_phase": true,
+    "artifact_only_context": true
+  },
+  "global_constraints": [
+    "如果目标项目以 Python 为主要语言，进入 harness 前必须先通过 codex-harness bootstrap-python 准备 uv 隔离环境，并配置 ruff、mypy、pytest。",
+    "只执行当前阶段，不要提前进入后续阶段。",
+    "每个阶段都视为新的独立对话；不要依赖其他阶段的聊天历史，只能通过明确声明的文档 artifact 传递上下文。",
+    "不要揣测用户意图；任何关键不明确点必须向用户提问。",
+    "如果当前阶段需要用户回答才能继续，不要进入下一阶段所需的实质输出；最终回复必须包含独占一行的 HARNESS_NEEDS_USER_INPUT，并在其后列出需要用户回答的问题。harness 检测到该标记后会停止，不会继续后续阶段。",
+    "只修改当前阶段输出要求中声明的文件。",
+    "不要回滚用户已有改动。"
+  ],
+  "prompt_style": {
+    "language": "zh-CN",
+    "tone": "direct",
+    "must_include": [
+      "目标",
+      "输入",
+      "输出",
+      "步骤"
+    ]
+  },
+  "phases": [
+    {
+      "id": "requirements",
+      "title": "需求",
+      "goal": [
+        "用户的具体需求是：{user_goal}",
+        "现在只完成需求阶段，目标是生成清晰、可确认、可进入设计阶段的需求文档。"
+      ],
+      "input": [
+        "当前项目目录：{project_root}",
+        "全局约束：\n{global_constraints}",
+        "上游 artifact：\n{context_files}"
+      ],
+      "output": [
+        "请在 doc/proposal.md 生成需求文档。",
+        "文档必须包含：背景、目标、非目标、用户故事或使用场景、功能需求、约束、待确认问题。"
+      ],
+      "steps": [
+        "先阅读项目目录和必要文件，判断需求是否依赖现有系统。",
+        "使用提问的方式确认不明确的需求；不要替用户补全关键决策。",
+        "如果信息足够，生成 proposal.md；如果信息不足，proposal.md 中必须列出阻塞问题和推荐的下一轮提问。",
+        "不要做设计、任务拆分或代码实现。"
+      ],
+      "context_inputs": [],
+      "expected_outputs": [
+        "doc/proposal.md"
+      ]
+    },
+    {
+      "id": "design",
+      "title": "设计",
+      "goal": [
+        "根据需求文档生成详细设计文档。"
+      ],
+      "input": [
+        "需求文档 doc/proposal.md。",
+        "当前解析到的需求文档：\n{context_files}"
+      ],
+      "output": [
+        "设计文档 doc/detailed-design.md。"
+      ],
+      "steps": [
+        "根据需求文档的内容，划分出模块，识别模块之间的关系，生成详细设计文档。",
+        "不要猜测我的意图，任何不明确的地方向我询问。",
+        "不要生成任务清单或修改业务代码。"
+      ],
+      "context_inputs": [
+        "doc/proposal.md"
+      ],
+      "expected_outputs": [
+        "doc/detailed-design.md"
+      ]
+    },
+    {
+      "id": "tasks",
+      "title": "任务",
+      "goal": [
+        "为每一个模块划分最小可执行的任务。"
+      ],
+      "input": [
+        "需求文档：doc/proposal.md；设计文档：doc/detailed-design.md。",
+        "当前解析到的输入文档：\n{context_files}"
+      ],
+      "output": [
+        "任务列表：",
+        "- doc/tasks/<module-name>.md（每一个模块对应一个）。",
+        "- doc/tasks/progress.md（总体进度）。"
+      ],
+      "steps": [
+        "根据需求文档和详细设计，为每一个模块生成 vibe coding 的最小任务。",
+        "每一个模块对应一个 <module-name>.md，用 checklist 表示子任务是否完成。",
+        "在 progress.md 中用 checklist 表示模块是否完成。",
+        "任何会影响任务划分的不明确点必须向用户询问，不要猜测我的意图。",
+        "不要修改业务代码。"
+      ],
+      "context_inputs": [
+        "doc/proposal.md",
+        "doc/detailed-design.md"
+      ],
+      "expected_outputs": [
+        "doc/tasks",
+        "doc/tasks/progress.md"
+      ]
+    },
+    {
+      "id": "implementation",
+      "title": "实现",
+      "goal": [
+        "生成 Vibe Coding 用的 prompt。"
+      ],
+      "input": [
+        "需求文档 doc/proposal.md；详细设计：doc/detailed-design.md；任务划分：doc/tasks。",
+        "当前解析到的输入：\n{context_files}"
+      ],
+      "output": [
+        "doc/prompt.md。"
+      ],
+      "steps": [
+        "阅读输入信息，了解当前要实现的工程，生成 doc/prompt.md 用来作为 Vibe Coding 的起始 prompt。",
+        "doc/prompt.md 必须指定主 agent 作为监督 Agent 跟踪整体进度，读取并维护 doc/tasks/progress.md。",
+        "doc/prompt.md 必须要求主 agent 根据 progress.md 自动拉起多个子 agents，每个子 agent 负责一个模块或一个明确的最小任务，避免单个 agent 上下文过长。",
+        "doc/prompt.md 必须要求子 agents 根据对应的 doc/tasks/<module-name>.md 实现代码、补充 pytest 单元测试，并把完成状态回写到任务 checklist。",
+        "doc/prompt.md 必须要求整个实现过程没有人工参与；监督 Agent 负责分配任务、合并结果、处理失败、重跑验证并更新 progress.md。",
+        "doc/prompt.md 必须要求代码有完整的 pytest 单元测试，并通过 mypy 和 ruff 检查；Python 项目优先使用 uv run pytest、uv run mypy、uv run ruff check .。",
+        "生成 prompt 过程中任何不明确的地方需要向我提问，不要猜测我的意图。"
+      ],
+      "context_inputs": [
+        "doc/proposal.md",
+        "doc/detailed-design.md",
+        "doc/tasks"
+      ],
+      "expected_outputs": [
+        "doc/prompt.md"
+      ]
+    }
+  ]
+}

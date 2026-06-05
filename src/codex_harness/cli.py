@@ -5,6 +5,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from .artifact_validation import validate_project_artifacts
 from .config import load_config
 from .defaults import default_config_text
 from .python_bootstrap import bootstrap_python_project
@@ -12,12 +13,14 @@ from .runner import (
     FORCE_NEXT_PHASE,
     SKIP_PHASE,
     STOP_RUN,
+    PhaseArtifactInvalidError,
     PhaseCommandFailedError,
     PhaseNeedsUserInputError,
     PhaseOutputMissingError,
     PhaseRun,
     create_run,
 )
+from .skill_flow import init_skill_flow
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,6 +31,19 @@ def main(argv: list[str] | None = None) -> int:
     init_parser = subparsers.add_parser("init", help="copy the example harness config into a project")
     init_parser.add_argument("--path", default=".", help="project path")
     init_parser.add_argument("--force", action="store_true", help="overwrite existing harness.json")
+
+    skill_flow_parser = subparsers.add_parser(
+        "init-skill-flow",
+        help="install bundled Codex skills and initialize lightweight Vibe2Spec docs",
+    )
+    skill_flow_parser.add_argument("--path", default=".", help="project path")
+    skill_flow_parser.add_argument("--codex-home", help="Codex home directory; defaults to CODEX_HOME or ~/.codex")
+    skill_flow_parser.add_argument("--force", action="store_true", help="overwrite installed skill folders")
+    skill_flow_parser.add_argument(
+        "--no-docs",
+        action="store_true",
+        help="only install skills; do not create doc/specs, doc/tasks, or quickstart",
+    )
 
     run_parser = subparsers.add_parser("run", help="create a phased harness run")
     run_parser.add_argument("--config", required=True, help="path to harness json config")
@@ -40,6 +56,12 @@ def main(argv: list[str] | None = None) -> int:
     start_parser.add_argument("-C", "--project-root", default=".", help="target project root")
     start_parser.add_argument("--config", help="path to harness json config")
     start_parser.add_argument("--dry-run", action="store_true", help="only create harness prompts")
+
+    validate_parser = subparsers.add_parser(
+        "validate-artifacts",
+        help="validate Spec-first docs such as proposal, design, tasks, and prompt",
+    )
+    validate_parser.add_argument("-C", "--project-root", default=".", help="target project root")
 
     bootstrap_parser = subparsers.add_parser("bootstrap-python", help="prepare a uv-based Python project")
     bootstrap_parser.add_argument("--path", default=".", help="target Python project path")
@@ -56,10 +78,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "init":
         return _init(Path(args.path), force=args.force)
+    if args.command == "init-skill-flow":
+        return _init_skill_flow(args)
     if args.command == "run":
         return _run(args)
     if args.command == "start":
         return _start(args)
+    if args.command == "validate-artifacts":
+        return _validate_artifacts(args)
     if args.command == "bootstrap-python":
         return _bootstrap_python(args)
     if args.command == "clean-runs":
@@ -74,7 +100,17 @@ def _normalize_argv(argv: list[str] | None) -> list[str] | None:
         argv = sys.argv[1:]
     if not argv:
         return argv
-    known_commands = {"init", "run", "start", "bootstrap-python", "clean-runs", "-h", "--help"}
+    known_commands = {
+        "init",
+        "init-skill-flow",
+        "run",
+        "start",
+        "validate-artifacts",
+        "bootstrap-python",
+        "clean-runs",
+        "-h",
+        "--help",
+    }
     if argv[0] in known_commands:
         return argv
     return ["start", *argv]
@@ -90,6 +126,30 @@ def _init(path: Path, *, force: bool) -> int:
     target.write_text(default_config_text(), encoding="utf-8")
 
     print(f"Created {target}")
+    return 0
+
+
+def _init_skill_flow(args: argparse.Namespace) -> int:
+    result = init_skill_flow(
+        project_root=Path(args.path),
+        codex_home=Path(args.codex_home).expanduser() if args.codex_home else None,
+        force=args.force,
+        create_docs=not args.no_docs,
+    )
+    print(f"Vibe2Spec skill flow initialized for: {result.project_root}")
+    print(f"- skills source: {result.skills_source}")
+    print(f"- skills target: {result.skills_target}")
+    if result.installed_skills:
+        print("- installed skills: " + ", ".join(result.installed_skills))
+    else:
+        print("- installed skills: none; existing skills kept. Re-run with --force to overwrite.")
+    if result.overwritten:
+        print("- overwritten: " + ", ".join(str(path) for path in result.overwritten))
+    if result.docs_created:
+        print("- created docs:")
+        for path in result.docs_created:
+            print(f"  - {path}")
+    print('Next: open Codex and say `$vibe2spec-flow <你的功能需求>`.')
     return 0
 
 
@@ -134,6 +194,9 @@ def _run(args: argparse.Namespace) -> int:
     except PhaseOutputMissingError as error:
         print(str(error), file=sys.stderr)
         return 1
+    except PhaseArtifactInvalidError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     except PhaseCommandFailedError as error:
         print(str(error), file=sys.stderr)
         return 1
@@ -142,6 +205,18 @@ def _run(args: argparse.Namespace) -> int:
         print(f"- {phase.phase_id}: {phase.prompt_file}")
     if not args.execute:
         print("Dry run only. No project artifacts were generated. Re-run with --execute to call Codex CLI.")
+    return 0
+
+
+def _validate_artifacts(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root).resolve()
+    issues = validate_project_artifacts(project_root)
+    if issues:
+        print(f"Artifact validation failed for: {project_root}", file=sys.stderr)
+        for issue in issues:
+            print(f"- {issue.path}: {issue.message}", file=sys.stderr)
+        return 1
+    print(f"Artifact validation passed for: {project_root}")
     return 0
 
 

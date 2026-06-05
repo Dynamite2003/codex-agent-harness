@@ -1,0 +1,71 @@
+{
+  "target": "/Users/bytedance/Documents/Programs/Vibe2Spec/experiments/vibe2spec-vs-direct-20260605/direct-baseline/index.html",
+  "passed": 16,
+  "total": 16,
+  "checks": [
+    {
+      "name": "page has todo form",
+      "ok": true
+    },
+    {
+      "name": "page has title input",
+      "ok": true
+    },
+    {
+      "name": "page has due date input",
+      "ok": true
+    },
+    {
+      "name": "page has list and empty state",
+      "ok": true
+    },
+    {
+      "name": "uses localStorage persistence",
+      "ok": true
+    },
+    {
+      "name": "has addTodo function",
+      "ok": true
+    },
+    {
+      "name": "has toggleTodo function",
+      "ok": true
+    },
+    {
+      "name": "has deleteTodo function",
+      "ok": true
+    },
+    {
+      "name": "has isOverdue function",
+      "ok": true
+    },
+    {
+      "name": "isOverdue ignores completed tasks",
+      "ok": true
+    },
+    {
+      "name": "isOverdue compares due date against today",
+      "ok": true
+    },
+    {
+      "name": "empty title validation exists",
+      "ok": true
+    },
+    {
+      "name": "submit uses date input value",
+      "ok": true
+    },
+    {
+      "name": "overdue badge is rendered",
+      "ok": true
+    },
+    {
+      "name": "completion triggers rerender and save",
+      "ok": true
+    },
+    {
+      "name": "delete filters item and saves",
+      "ok": true
+    }
+  ]
+}

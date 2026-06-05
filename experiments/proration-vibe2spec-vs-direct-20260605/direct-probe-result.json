@@ -1,0 +1,52 @@
+{
+  "target": "/Users/bytedance/Documents/Programs/Vibe2Spec/experiments/proration-vibe2spec-vs-direct-20260605/direct-baseline/index.html",
+  "passed": 2,
+  "total": 6,
+  "checks": [
+    {
+      "name": "exposes calculateProration",
+      "ok": true
+    },
+    {
+      "name": "does not use fixed 30-day billing period",
+      "ok": false
+    },
+    {
+      "name": "february 2026 coupon tax",
+      "ok": false,
+      "actual": {
+        "total": 27.28,
+        "kind": "charge",
+        "periodDays": 30,
+        "affectedDays": 14
+      }
+    },
+    {
+      "name": "leap year february",
+      "ok": false,
+      "actual": {
+        "total": 30.0,
+        "kind": "charge",
+        "periodDays": 30,
+        "affectedDays": 15
+      }
+    },
+    {
+      "name": "downgrade refund",
+      "ok": false,
+      "actual": {
+        "total": -32.0,
+        "kind": "refund",
+        "periodDays": 30,
+        "affectedDays": 16
+      }
+    },
+    {
+      "name": "invalid end before start",
+      "ok": true,
+      "actual": {
+        "error": "Invalid date range"
+      }
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Demo Functional Probe</title>
+  </head>
+  <body>
+    <pre id="result">running</pre>
+    <iframe id="app" src="../../examples/demo-project/index.html"></iframe>
+    <script>
+      const result = document.querySelector("#result");
+      const frame = document.querySelector("#app");
+
+      function yesterday() {
+        const date = new Date();
+        date.setDate(date.getDate() - 1);
+        return date.toISOString().slice(0, 10);
+      }
+
+      function tomorrow() {
+        const date = new Date();
+        date.setDate(date.getDate() + 1);
+        return date.toISOString().slice(0, 10);
+      }
+
+      function submit(win, title, dueDate) {
+        const doc = win.document;
+        doc.querySelector("#title-input").value = title;
+        doc.querySelector("#due-input").value = dueDate;
+        doc.querySelector("#todo-form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      }
+
+      function click(element) {
+        element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      }
+
+      function change(element) {
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      function snapshot(win) {
+        const doc = win.document;
+        return {
+          items: [...doc.querySelectorAll("li")].map((item) => item.textContent.replace(/\s+/g, " ").trim()),
+          summary: doc.querySelector("#summary").textContent,
+          error: doc.querySelector("#error").textContent,
+          stored: JSON.parse(win.localStorage.getItem("vibe2spec-demo-todos") || "[]"),
+        };
+      }
+
+      frame.addEventListener("load", () => {
+        try {
+          const win = frame.contentWindow;
+          win.localStorage.removeItem("vibe2spec-demo-todos");
+          win.location.reload();
+          setTimeout(() => {
+            const app = frame.contentWindow;
+            const doc = app.document;
+            const checks = [];
+
+            submit(app, "", "");
+            checks.push(["empty title rejected", snapshot(app).error.includes("required") && snapshot(app).stored.length === 0]);
+
+            submit(app, "Future task", tomorrow());
+            checks.push(["future task added", snapshot(app).items.some((text) => text.includes("Future task"))]);
+            checks.push(["future task not overdue", !snapshot(app).items.find((text) => text.includes("Future task")).includes("Overdue")]);
+
+            submit(app, "Late task", yesterday());
+            checks.push(["late task added", snapshot(app).items.some((text) => text.includes("Late task"))]);
+            checks.push(["late task overdue", snapshot(app).items.find((text) => text.includes("Late task")).includes("Overdue")]);
+
+            const lateItem = [...doc.querySelectorAll("li")].find((item) => item.textContent.includes("Late task"));
+            const lateCheckbox = lateItem.querySelector("input[type='checkbox']");
+            lateCheckbox.checked = true;
+            change(lateCheckbox);
+            checks.push(["complete removes overdue", !snapshot(app).items.find((text) => text.includes("Late task")).includes("Overdue")]);
+
+            const beforeReload = snapshot(app).stored.length;
+            app.location.reload();
+            setTimeout(() => {
+              const reloaded = snapshot(frame.contentWindow);
+              checks.push(["localStorage persists after reload", reloaded.stored.length === beforeReload && reloaded.items.length === beforeReload]);
+
+              const firstDelete = frame.contentWindow.document.querySelector("li button.secondary");
+              click(firstDelete);
+              checks.push(["delete removes item", snapshot(frame.contentWindow).stored.length === beforeReload - 1]);
+
+              const passed = checks.filter(([, ok]) => ok).length;
+              result.textContent = JSON.stringify({ passed, total: checks.length, checks }, null, 2);
+            }, 100);
+          }, 100);
+        } catch (error) {
+          result.textContent = JSON.stringify({ error: String(error), stack: error.stack }, null, 2);
+        }
+      });
+    </script>
+  </body>
+</html>

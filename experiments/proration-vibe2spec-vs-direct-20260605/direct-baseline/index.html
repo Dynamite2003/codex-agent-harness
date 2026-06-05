@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Direct Proration Calculator</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #f5f6f8; color: #1f2937; }
+      main { width: min(860px, calc(100vw - 32px)); margin: 48px auto; background: #fff; border: 1px solid #d9dee8; border-radius: 8px; padding: 24px; }
+      h1 { margin-top: 0; }
+      form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      label { display: grid; gap: 6px; font-size: 14px; color: #4b5563; }
+      input { height: 38px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 10px; font: inherit; }
+      button { grid-column: 1 / -1; height: 42px; border: 0; border-radius: 6px; background: #2563eb; color: white; font: inherit; cursor: pointer; }
+      #result { margin-top: 18px; padding: 16px; border-radius: 8px; background: #eff6ff; }
+      .error { background: #fff1f2 !important; color: #be123c; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Direct Proration Calculator</h1>
+      <form id="calculator">
+        <label>Current monthly price <input id="current" type="number" value="100" step="0.01" /></label>
+        <label>New monthly price <input id="next" type="number" value="160" step="0.01" /></label>
+        <label>Billing start <input id="start" type="date" value="2026-02-01" /></label>
+        <label>Billing end <input id="end" type="date" value="2026-03-01" /></label>
+        <label>Change date <input id="change" type="date" value="2026-02-15" /></label>
+        <label>Coupon percent <input id="coupon" type="number" value="10" step="0.01" /></label>
+        <label>Tax percent <input id="tax" type="number" value="8.25" step="0.01" /></label>
+        <button type="submit">Calculate</button>
+      </form>
+      <div id="result">Enter values and calculate.</div>
+    </main>
+    <script>
+      function money(value) {
+        return Math.round(value * 100) / 100;
+      }
+
+      function calculateProration(input) {
+        const start = new Date(input.start);
+        const end = new Date(input.end);
+        const change = new Date(input.change);
+        if (end <= start || change < start || change >= end) {
+          return { error: "Invalid date range" };
+        }
+
+        // Direct simplification: assume all billing months have 30 days.
+        const remainingDays = Math.ceil((end - change) / 86400000);
+        const dailyDelta = (input.next - input.current) / 30;
+        const subtotal = dailyDelta * remainingDays;
+        const afterCoupon = subtotal * (1 - input.coupon / 100);
+        const total = money(afterCoupon * (1 + input.tax / 100));
+        return { total, remainingDays, periodDays: 30 };
+      }
+
+      function readInput() {
+        return {
+          current: Number(document.querySelector("#current").value),
+          next: Number(document.querySelector("#next").value),
+          start: document.querySelector("#start").value,
+          end: document.querySelector("#end").value,
+          change: document.querySelector("#change").value,
+          coupon: Number(document.querySelector("#coupon").value),
+          tax: Number(document.querySelector("#tax").value),
+        };
+      }
+
+      function render(output) {
+        const target = document.querySelector("#result");
+        if (output.error) {
+          target.className = "error";
+          target.textContent = output.error;
+          return;
+        }
+        target.className = "";
+        target.textContent = `${output.total >= 0 ? "Charge" : "Refund"} $${Math.abs(output.total).toFixed(2)} (${output.remainingDays}/${output.periodDays} days)`;
+      }
+
+      document.querySelector("#calculator").addEventListener("submit", (event) => {
+        event.preventDefault();
+        render(calculateProration(readInput()));
+      });
+
+      window.calculateProration = calculateProration;
+    </script>
+  </body>
+</html>
