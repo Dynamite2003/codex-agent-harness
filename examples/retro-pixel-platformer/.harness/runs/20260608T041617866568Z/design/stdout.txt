@@ -1,5 +1,0 @@
-已生成详细设计文档：[doc/detailed-design.md](/Users/bytedance/Documents/Programs/Vibe2Spec/examples/retro-pixel-platformer/doc/detailed-design.md)。
-
-内容覆盖了你要求的章节：`Context`、`Goals & Non-Goals`、模块划分、数据模型、状态机/关键流程、`API / 本地契约`、`Key Design Decisions (ADR)`、`Acceptance Criteria 映射`、风险和测试策略，并补充了 `目标 / 输入 / 输出 / 步骤`。
-
-没有修改业务代码，也没有生成任务清单。验证方式：复查了文档结构、ADR 的 `Decision / Why / Alternatives / Tradeoffs` 三要素，以及 spec 回填说明。
