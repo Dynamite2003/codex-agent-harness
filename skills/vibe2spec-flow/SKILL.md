@@ -24,12 +24,18 @@ Pick the smallest mode that satisfies the user:
 3. Write Spec-first docs:
    - EARS requirements: `WHEN <trigger> THE SYSTEM SHALL <action>`.
    - ADR decisions: `Decision`, `Why`, `Alternatives / Tradeoffs`.
-   - Acceptance criteria: `GIVEN / WHEN / THEN`.
+   - Product Archetype, Success Mode, Domain Lenses, and likely Failure Modes.
+   - Success Contract: one Primary Success Mode, Priority Budget, Non-negotiable Quality Bar, and MVP Success Evidence.
+   - Primary Value Slice: the smallest end-to-end user-visible proof of the Primary Success Mode.
+   - Behavioral and Quality Requirements beyond feature existence.
+   - Acceptance criteria split into Functional / Behavioral / Quality, using `GIVEN / WHEN / THEN`.
    - Always include Non-Goals / Out of Scope.
-4. Mark uncertain items as `Open Questions` or `建议假设`; do not present guesses as confirmed decisions.
-5. Default implementation is a single agent working through `doc/tasks/progress.md`. Use subagents only when tasks are independent, file ownership is clear, and context size justifies it.
-6. If implementation changes behavior, schema, API contracts, or key decisions, backfill the relevant spec/design/task docs.
-7. Run the repo's existing verification commands. If a command is unavailable, record the reason and use the best focused alternative.
+4. Apply the Anti-Checklist Rule: feature existence is not enough; artifacts must define and verify what makes the result acceptable for the intended user and success mode.
+5. Apply the Primary Success Rule: the highest-priority success mode must be demonstrated by AFK evidence in the MVP; HITL may block release approval but cannot be the only proof of success.
+6. Mark uncertain items as `Open Questions` or `建议假设`; do not present guesses as confirmed decisions.
+7. Default implementation is a single agent working through `doc/tasks/progress.md`, but the recommended order must start with the Primary Value Slice unless a prerequisite is strictly required for that slice. Use subagents only when tasks are independent, file ownership is clear, and context size justifies it.
+8. If implementation changes behavior, schema, API contracts, success criteria, or key decisions, backfill the relevant spec/design/task docs.
+9. Run the repo's existing verification commands. If a command is unavailable, record the reason and use the best focused alternative.
 
 ## Artifact Shapes
 
@@ -37,21 +43,32 @@ Pick the smallest mode that satisfies the user:
 
 - Context
 - Goals & Non-Goals
+- Target users and context
+- Success Contract: Primary Success Mode, Priority Budget, Non-negotiable Quality Bar, MVP Success Evidence
+- Product Archetype / Success Mode / Domain Lenses
+- Failure Mode Lens
 - User Stories
 - Functional Requirements (EARS)
+- Behavioral Requirements
+- Quality Requirements
 - Key Decisions / ADR Candidates
-- Acceptance Criteria (GIVEN-WHEN-THEN)
+- Functional / Behavioral / Quality Acceptance Criteria (GIVEN-WHEN-THEN)
 - Out of Scope
 - Constraints
+- Verification Strategy
 - Risks
 - Open Questions
 
 `doc/detailed-design.md` should include:
 
 - Context and design scope
+- Success Contract design response
+- Primary Value Slice and user-visible success evidence
 - Module responsibilities
 - Data model, state machine, or key workflows when relevant
 - API / local contracts
+- Design response to Success Mode, Domain Lenses, and Failure Modes
+- UI state matrix, data/state invariants, AI/Agent boundaries, integration degradation, or exploration learning plan when applicable
 - ADRs
 - Acceptance-criteria mapping
 - Test strategy
@@ -63,11 +80,14 @@ Each `doc/tasks/<module-name>.md` should include:
 - Dependencies
 - Out of Scope
 - Checklist
+- Primary Value Slice contribution, when applicable
 - Traceability to EARS / ADR / Acceptance Criteria
+- Traceability to Success Contract / Success Mode / Failure Modes / Quality Requirements
 - Test requirements
 - `AFK` or `HITL`
 - `Blocked by`
 - Likely file scope
+- Quality, edge-state, and verification pass tasks
 
 ## When To Ask
 
