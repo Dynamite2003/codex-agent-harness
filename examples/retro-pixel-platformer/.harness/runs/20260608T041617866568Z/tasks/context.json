@@ -1,0 +1,29 @@
+{
+  "phase_id": "tasks",
+  "phase_title": "任务",
+  "context_inputs": [
+    "doc/proposal.md",
+    "doc/detailed-design.md"
+  ],
+  "resolved_context_files": [
+    "/Users/bytedance/Documents/Programs/Vibe2Spec/examples/retro-pixel-platformer/doc/proposal.md",
+    "/Users/bytedance/Documents/Programs/Vibe2Spec/examples/retro-pixel-platformer/doc/detailed-design.md"
+  ],
+  "missing_context_files": [],
+  "expected_outputs": [
+    "/Users/bytedance/Documents/Programs/Vibe2Spec/examples/retro-pixel-platformer/doc/tasks",
+    "/Users/bytedance/Documents/Programs/Vibe2Spec/examples/retro-pixel-platformer/doc/tasks/progress.md"
+  ],
+  "conversation": {
+    "mode": "new_per_phase",
+    "directory": "/Users/bytedance/Documents/Programs/Vibe2Spec/examples/retro-pixel-platformer/.harness/runs/20260608T041617866568Z/tasks/conversation",
+    "artifact_only_context": true
+  },
+  "prompt_shape": [
+    "目标",
+    "输入",
+    "输出",
+    "步骤"
+  ],
+  "validate_artifacts": true
+}

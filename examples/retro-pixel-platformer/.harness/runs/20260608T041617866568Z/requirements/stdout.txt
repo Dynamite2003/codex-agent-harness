@@ -1,0 +1,10 @@
+已完成需求阶段，仅生成规划 artifacts，未进入设计或实现。
+
+新增文件：
+- [doc/proposal.md](/Users/bytedance/Documents/Programs/Vibe2Spec/examples/retro-pixel-platformer/doc/proposal.md)
+- [doc/specs/index.md](/Users/bytedance/Documents/Programs/Vibe2Spec/examples/retro-pixel-platformer/doc/specs/index.md)
+- [doc/specs/2026-06-08-retro-pixel-platformer.md](/Users/bytedance/Documents/Programs/Vibe2Spec/examples/retro-pixel-platformer/doc/specs/2026-06-08-retro-pixel-platformer.md)
+
+内容已覆盖 `Context`、`Goals & Non-Goals`、`User Stories`、`Functional Requirements (EARS)`、`Key Decisions / ADR Candidates`、`Acceptance Criteria (GIVEN-WHEN-THEN)`、`Out of Scope`、`Constraints`、`Open Questions`，并说明该 greenfield 游戏属于新 feature，需要独立 spec。
+
+校验：只新增了 `doc/` 下本阶段要求的文档文件；项目当前仍整体显示为未跟踪目录 `?? ./`，未回滚或改动已有 `.harness` 文件。

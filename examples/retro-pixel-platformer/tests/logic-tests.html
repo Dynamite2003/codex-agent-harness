@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Lantern Ridge Run Logic Tests</title>
+    <style>
+      body { margin: 24px; background: #101614; color: #f6f1d8; font: 14px monospace; }
+      .pass { color: #a8d67a; }
+      .fail { color: #f08a70; }
+      pre { white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>Logic Tests</h1>
+    <pre id="results">Running...</pre>
+    <script src="../src/game.js"></script>
+    <script>
+      (function () {
+        var api = window.RetroPixelPlatformer;
+        var level = api.loadLevel("lantern-ridge");
+        var config = api.DEFAULT_CONFIG;
+        var logs = [];
+        var failed = 0;
+
+        function assert(name, condition) {
+          logs.push((condition ? "PASS " : "FAIL ") + name);
+          if (!condition) failed += 1;
+        }
+
+        function blankInput(overrides) {
+          return Object.assign({
+            moveLeft: false,
+            moveRight: false,
+            jumpDown: false,
+            jumpPressed: false,
+            restartPressed: false
+          }, overrides || {});
+        }
+
+        function runUntilGrounded(state) {
+          for (var i = 0; i < 90 && !state.player.grounded; i += 1) {
+            api.updateGame(state, blankInput(), config.fixedStep, level, config);
+          }
+        }
+
+        assert("known level loads", level.id === "lantern-ridge");
+        assert("unknown level throws", (function () {
+          try { api.loadLevel("missing"); return false; } catch (error) { return true; }
+        })());
+
+        var state = api.createInitialGameState(level, config);
+        assert("initial state is playing", state.status === "playing");
+        assert("initial lives are three", state.lives === 3);
+        assert("level has collectibles", state.collectibles.length >= 1);
+        assert("level has enemies", state.enemies.length >= 1);
+        assert("level has hazards", state.hazards.length >= 1);
+
+        assert("solid query finds floor", api.isSolidAt(level, 1, 10) === true);
+        assert("open air is not solid", api.isSolidAt(level, 1, 2) === false);
+        assert("AABB intersect true", api.intersects({ x: 0, y: 0, width: 4, height: 4 }, { x: 2, y: 2, width: 4, height: 4 }));
+        assert("AABB intersect false", !api.intersects({ x: 0, y: 0, width: 4, height: 4 }, { x: 9, y: 9, width: 4, height: 4 }));
+
+        runUntilGrounded(state);
+        var groundedY = state.player.position.y;
+        api.updateGame(state, blankInput({ jumpPressed: true, jumpDown: true }), config.fixedStep, level, config);
+        assert("grounded jump applies upward velocity", state.player.velocity.y < 0 && !state.player.grounded);
+        var jumpVelocity = state.player.velocity.y;
+        api.updateGame(state, blankInput({ jumpPressed: true, jumpDown: true }), config.fixedStep, level, config);
+        assert("airborne jump does not reset upward velocity", state.player.velocity.y > jumpVelocity);
+
+        state = api.createInitialGameState(level, config);
+        runUntilGrounded(state);
+        var startX = state.player.position.x;
+        api.updateGame(state, blankInput({ moveRight: true }), config.fixedStep, level, config);
+        assert("right input moves player right", state.player.position.x > startX);
+        api.updateGame(state, blankInput({ moveLeft: true }), config.fixedStep, level, config);
+        assert("left input sets facing left", state.player.facing === "left");
+
+        state = api.createInitialGameState(level, config);
+        var collectible = state.collectibles[0];
+        state.player.position.x = collectible.position.x;
+        state.player.position.y = collectible.position.y;
+        api.updateGame(state, blankInput(), config.fixedStep, level, config);
+        assert("collectible marks collected", collectible.collected === true);
+        assert("collectible adds score", state.score === 100);
+
+        state = api.createInitialGameState(level, config);
+        var enemy = state.enemies[0];
+        state.player.position.x = enemy.position.x;
+        state.player.position.y = enemy.position.y - state.player.size.y + 1;
+        state.player.previousPosition = { x: enemy.position.x, y: enemy.position.y - state.player.size.y - 8 };
+        state.player.velocity.y = 120;
+        assert("stomp contact classified", api.classifyEnemyContact(state.player, state.player.previousPosition ? {
+          position: state.player.previousPosition,
+          size: state.player.size,
+          velocity: state.player.velocity
+        } : state.player, enemy) === "stomp");
+
+        state = api.createInitialGameState(level, config);
+        enemy = state.enemies[0];
+        state.player.position.x = enemy.position.x - 4;
+        state.player.position.y = enemy.position.y;
+        state.player.previousPosition = { x: state.player.position.x - 2, y: state.player.position.y };
+        state.player.velocity.y = 0;
+        api.updateGame(state, blankInput(), config.fixedStep, level, config);
+        assert("side contact costs one life", state.lives === 2);
+        assert("life loss respawns player", state.player.position.x === level.playerSpawn.x);
+
+        state = api.createInitialGameState(level, config);
+        state.lives = 1;
+        state.player.position.x = state.hazards[0].bounds.x;
+        state.player.position.y = state.hazards[0].bounds.y - state.player.size.y + 2;
+        api.updateGame(state, blankInput(), config.fixedStep, level, config);
+        assert("life zero enters lose", state.status === "lose");
+
+        state = api.createInitialGameState(level, config);
+        state.player.position.x = state.goal.bounds.x;
+        state.player.position.y = state.goal.bounds.y;
+        api.updateGame(state, blankInput(), config.fixedStep, level, config);
+        assert("goal overlap wins", state.status === "win");
+        var winX = state.player.position.x;
+        api.updateGame(state, blankInput({ moveRight: true }), config.fixedStep, level, config);
+        assert("win state stops movement", state.player.position.x === winX);
+        state = api.updateGame(state, blankInput({ restartPressed: true }), config.fixedStep, level, config);
+        assert("restart after win resets state", state.status === "playing" && state.score === 0 && state.lives === 3);
+
+        var inputTarget = document.createElement("div");
+        var input = api.createKeyboardInput(inputTarget);
+        inputTarget.dispatchEvent(new KeyboardEvent("keydown", { code: "Space" }));
+        assert("jump pressed edge true", input.read().jumpPressed === true && input.read().jumpDown === true);
+        input.afterFrame();
+        assert("jump pressed edge clears", input.read().jumpPressed === false && input.read().jumpDown === true);
+        inputTarget.dispatchEvent(new KeyboardEvent("keyup", { code: "Space" }));
+        assert("jump release clears down", input.read().jumpDown === false);
+        input.destroy();
+        inputTarget.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyR" }));
+        assert("destroyed input ignores events", input.read().restartPressed === false);
+
+        var resultNode = document.getElementById("results");
+        resultNode.textContent = logs.join("\n") + "\n\n" + (failed ? failed + " failed" : "All tests passed");
+        resultNode.className = failed ? "fail" : "pass";
+        document.title = failed ? "FAIL Logic Tests" : "PASS Logic Tests";
+      })();
+    </script>
+  </body>
+</html>
