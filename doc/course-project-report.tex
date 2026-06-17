@@ -97,7 +97,21 @@ Codex 已经可以在本地仓库中阅读代码、修改文件并运行测试�
 
 本项目关注的是编码前的约束如何落地。在 proration 计费实验中，原始需求只说“按天计费”，Direct baseline 将账期固定为 30 天，忽略 2 月、闰年和 31 天账期。这个问题不是语法错误，而是业务边界没有进入需求和验收标准。
 
-Vibe2Spec 的处理方式是在 Codex 外层增加文件化流程，先生成可审阅 artifact，再进入实现阶段。项目贡献包括：实现 \code{requirements -> design -> tasks -> implementation} 四阶段 CLI harness；提供 \code{vibe2spec-flow} skill；将阶段 prompt、上下文、命令、输出、状态和 manifest 落盘；通过三组对比实验说明不同任务风险下 Spec-first 的收益边界。
+Vibe2Spec 的处理方式是在 Codex 外层增加文件化流程，先生成可审阅 artifact，再进入实现阶段。项目不试图替代 Codex 的编码能力，而是把“让 Codex 做什么、可以看什么、必须产出什么、失败时如何停止”显式写入配置和运行记录中。
+
+\subsection{研究问题与项目贡献}
+
+本项目围绕三个问题展开：第一，如何把一句自然语言开发需求转化为可审阅、可实现、可验证的 artifact 链；第二，如何在不强制多 agent、不显著拖慢日常开发的情况下，把 Spec-first 流程内化到 Codex 使用体验中；第三，在哪些任务上，Vibe2Spec 相比直接 Codex 开发能体现实际收益。
+
+围绕上述问题，项目形成了以下可运行产物：
+\begin{itemize}
+  \item 实现 \code{requirements -> design -> tasks -> implementation} 四阶段 CLI harness；
+  \item 将阶段输入、prompt、上下文清单、执行命令、stdout/stderr、状态文件和 manifest 落盘；
+  \item 提供 \code{vibe2spec-flow} skill，让日常使用默认不启动完整 harness；
+  \item 引入 artifact 内容校验，覆盖 Product Archetype、Success Mode、Failure Modes、Behavioral Requirements、Quality Requirements 等质量镜头；
+  \item 默认实现阶段改为单 agent 顺序执行，subagents 只作为上下文过大或任务独立时的可选策略；
+  \item 通过 Todo、Sprint Board、Proration 三组实验区分“小任务打平”“复杂 UI 流程有过程收益”“隐含业务边界有功能收益”三类情况。
+\end{itemize}
 
 \section{方法设计}
 
@@ -123,6 +137,10 @@ Vibe2Spec 固定采用 requirements、design、tasks、implementation 四个阶�
 
 这种 artifact-only 模式并不追求复杂平台化，而是把一次自然语言开发目标变成一组稳定文件。每个阶段都能回答四个问题：当前只做什么、可以读取什么、必须产出什么、怎样判断完成。
 
+\subsection{Artifact-only 上下文隔离}
+
+默认配置启用 \code{new\_conversation\_per\_phase} 和 \code{artifact\_only\_context}。也就是说，每个阶段都应该是新的 Codex 对话，阶段之间不依赖聊天历史，只通过配置声明的 artifact 传递上下文。例如，设计阶段读取 \code{doc/proposal.md}，任务阶段读取 \code{doc/proposal.md} 和 \code{doc/detailed-design.md}，实现阶段读取需求、设计和 \code{doc/tasks/}。运行时还会生成 \code{context.json}，记录本阶段声明了哪些上下文输入、哪些实际存在、哪些缺失，以及预期输出是什么。
+
 \subsection{Harness 与 Skill 两种入口}
 
 项目提供两条入口。CLI harness 会在目标项目中生成 \code{.harness/runs/<run-id>/}。每个阶段目录包含 \code{prompt.md}、\code{context.json}、\code{command.sh}、\code{stdout.txt}、\code{stderr.txt}、\code{status.json} 和 \code{conversation/}；运行根目录包含 \code{manifest.json}，记录用户目标、项目路径、阶段文件和隔离策略。这一路径主要用于课程展示、失败复盘、CI 风格复跑和需要 stdout/stderr 的场景。
@@ -136,6 +154,19 @@ CLI harness 的成本是等待更长、交互更重。日常使用时可以改�
 早期实现曾根据“请确认”“需要补充”等自然语言关键词判断 Codex 是否需要用户输入。实验显示这会误触发，因为这些词可能出现在 prompt 模板、日志或普通总结中。当前版本改为显式协议：只有输出中存在独占一行的 \code{HARNESS\_NEEDS\_USER\_INPUT} 时，harness 才暂停当前阶段，并把后续问题写入 \code{needs-user-input.md}。
 
 项目没有默认使用 subagents。小任务中并行 agent 会增加文件所有权、合并顺序和上下文冲突成本，因此默认实现阶段改为单 agent 顺序执行；只有任务彼此独立、文件范围清晰且上下文明显过长时，才允许可选启用子 agents。
+
+\subsection{运行目录与审计文件}
+
+每次完整运行会在目标项目下创建 \code{.harness/runs/<run-id>/}。每个阶段目录包含：
+\begin{itemize}
+  \item \code{prompt.md}：本阶段传给 Codex 的 prompt；
+  \item \code{context.json}：本阶段允许使用的上下文和预期产物；
+  \item \code{command.sh}：渲染后的 Codex CLI 命令；
+  \item \code{stdout.txt} / \code{stderr.txt}：执行模式下保存 Codex 输出；
+  \item \code{status.json}：阶段执行状态；
+  \item \code{needs-user-input.md}：Codex 按协议要求用户补充信息时记录问题。
+\end{itemize}
+运行根目录还会生成 \code{manifest.json}，记录 run id、项目名、项目根目录、用户目标、隔离策略和所有阶段文件路径。这样在阶段失败时，可以区分是 Codex 命令失败、用户信息不足、产物缺失，还是 artifact 内容不合格。
 
 \section{系统实现}
 
@@ -164,6 +195,12 @@ CLI harness 的成本是等待更长、交互更重。日常使用时可以改�
 
 CLI 能力覆盖运行、初始化、artifact 校验、Python bootstrap 和旧 run 清理。其中 \code{start} 是默认入口；如果用户直接运行 \code{./harness -C <path> "goal"}，程序会自动规范化为 \code{start}，降低课程演示和日常使用门槛。
 
+\subsection{CLI 能力与执行行为}
+
+当前 CLI 支持 \code{init-skill-flow}、\code{validate-artifacts}、\code{init}、\code{run}、\code{start}、\code{bootstrap-python} 和 \code{clean-runs}。其中 \code{run --execute} 会真实调用 Codex CLI，并按阶段检查目标项目中的产物；\code{--dry-run} 只生成 prompt、context、command 和 manifest，不调用 Codex，也不生成业务 artifact。
+
+执行模式还支持几类恢复动作：用户补答会写入 \code{user-answers.md} 并追加到当前阶段 prompt 后重跑；用户认为当前阶段产物已足够时可用 \code{NEXT\_PHASE} 强制进入下一阶段；阶段结束后缺少产物时，harness 会提示补充重试指令，也允许用 \code{SKIP\_PHASE} 记录审计后跳过。命令失败、用户追问、强制进入下一阶段和缺失产物跳过都会写入状态或审计文件。
+
 \subsection{配置、Prompt 与 Artifact 校验}
 
 配置文件要求包含 \code{project\_name}、\code{workspace}、\code{codex.command} 和 \code{phases}，阶段顺序必须严格等于 \code{requirements -> design -> tasks -> implementation}。固定阶段顺序牺牲一部分通用工作流灵活性，但换来更稳定的工程约束和更简单的测试边界。
@@ -171,6 +208,10 @@ CLI 能力覆盖运行、初始化、artifact 校验、Python bootstrap 和旧 r
 每个阶段 prompt 固定为“目标、输入、输出、步骤”四段。渲染时注入用户目标、项目根目录、run 目录、阶段目录、上下文文件、全局约束和对话隔离策略。默认实现 prompt 会先要求 agent 识别项目技术栈和可用工具，再选择验证方式，避免把 Python 项目的 uv、pytest、mypy、ruff 约束强加给静态 Web 或无依赖项目。
 
 Artifact 校验被改为规则表驱动。以 \code{doc/proposal.md} 为例，校验要求覆盖 Context、Goals \& Non-Goals、Target Users、Product Archetype / Success Mode / Domain Lenses、Failure Mode Lens、Functional Requirements、Behavioral Requirements、Quality Requirements、ADR Candidates、Acceptance Criteria、Verification Strategy 和 Risks。该校验仍是启发式检查，不能替代人工评审，但能防止明显的结构缺失。
+
+\subsection{已实现能力小结}
+
+截至本报告整理时，项目已经具备一个可运行的 0.1.0 版本：可以通过 \code{./harness}、\code{harness} 或 \code{codex-harness} 启动；可以自动查找目标项目中的 \code{harness.json}，没有时生成默认配置；可以 dry-run 生成完整四阶段 prompt、上下文文件、命令脚本和 manifest；可以 execute 真实调用 Codex CLI，并把 prompt 通过 stdin 传给 Codex；可以检查 expected outputs、处理显式追问、接收用户补答、处理缺失产物、记录命令失败，并为 Python 项目生成基础质量工具配置。
 
 \section{默认流程演进}
 
@@ -211,6 +252,23 @@ Todo deadline 任务是给无依赖 Todo Web App 增加截止时间和逾期标�
 
 Sprint Board Lite 任务是实现一个无依赖静态 Web 看板，包含任务新增、四列状态流转、筛选、KPI、本地持久化和 JSON 导入导出。两组都通过核心契约测试，但 Vibe2Spec 保留了 proposal、detailed-design、tasks、prompt 和 verification 链路。该实验还暴露了 harness 本身问题：追问检测过宽、实现 prompt 过度绑定 Python 工具链、subagents 默认策略过重。这些问题后来被修复，并被纳入回归测试。
 
+\begin{table}[htbp]
+\centering
+\caption{Sprint Board Lite 对比摘要}
+\label{tab:sprint}
+\begin{tabular}{P{0.22\textwidth}P{0.30\textwidth}P{0.30\textwidth}}
+\toprule
+维度 & Direct Codex & Harness Flow \\
+\midrule
+功能完整性 & 契约测试通过 & 契约测试通过，并补充 focused tests 和 DOM smoke \\
+桌面端结构 & 可用，但 JSON 区留白和截断明显 & 表单、筛选、导入导出和看板层级更清楚 \\
+移动端 & 存在裁切问题 & 仍有裁切，未完全合格 \\
+可追踪性 & 缺少需求/设计/任务链路 & proposal、design、tasks、prompt、verification 全链路可追溯 \\
+流程成本 & 快、简单 & 更慢，暴露出 harness 误触发和环境绑定问题 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \subsection{Proration 计费边界}
 
 Proration 实验用于检查隐含业务规则。原始需求只有一句话：做一个订阅升级/降级的按天计费计算器，输入当前月费、新月费、账期开始/结束日期、变更日期、优惠券和税率，输出本账期应补收或退款金额。
@@ -234,9 +292,28 @@ Case & Direct & Vibe2Spec / 期望 & 说明 \\
 
 Vibe2Spec 组的差异来自 artifact 链路：需求阶段将“按天计费”拆成 EARS 规则；验收阶段把 28 天、29 天、31 天退款和非法日期变成 fixture；设计阶段记录 UTC date-only arithmetic 和退款符号保留；实现 prompt 要求遵循 Spec / ADR / Acceptance Criteria；验证阶段直接调用核心计算函数，而不是只看页面是否渲染。该实验说明，边界规则需要尽早进入验收材料。
 
+\begin{table}[htbp]
+\centering
+\caption{Proration 实验中的 artifact 作用}
+\label{tab:proration-artifacts}
+\begin{tabular}{P{0.18\textwidth}P{0.33\textwidth}P{0.36\textwidth}}
+\toprule
+环节 & 处理的问题 & 产生的效果 \\
+\midrule
+需求阶段 & 实际账期天数、coupon-before-tax、tax on net delta、final-only rounding、refund 负数、非法日期 & 模糊“按天计费”被拆成可审阅的 EARS 规则 \\
+验收阶段 & 28 天 2 月、29 天闰年、31 天退款、非法日期 & 边界条件变成具体数值 fixture，如 29.23、31.03、-30.97 \\
+设计阶段 & JavaScript 日期解析受时区或 DST 影响、退款符号保留 & 采用 UTC date-only day difference，并保留负数 refund \\
+实现阶段 & 编码阶段不重新自由解释需求 & 要求遵循 Spec / ADR / Acceptance Criteria \\
+验证阶段 & 页面可渲染不等于计费正确 & 直接调用核心计算函数验证 6 个探针 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \section{验证与质量保证}
 
 仓库级验证包括单元测试、静态检查、类型检查和报告构建。当前测试覆盖 CLI 入口、配置解析、prompt 渲染、执行流程、用户追问、缺失产物处理、artifact 校验、Python bootstrap 和默认配置同步。新增回归测试要求：当 proposal 只包含旧版 Context、Goals、EARS、ADR、Acceptance Criteria 和 Out of Scope，但缺少质量镜头时，\code{validate-artifacts} 必须失败；普通日志中内联提到 \code{HARNESS\_NEEDS\_USER\_INPUT} 或出现“请确认”等词时，不能误触发暂停。
+
+现有 32 个单元测试覆盖了轻量 skill flow 初始化、artifact 内容校验、默认 \code{start} 流程、run id 唯一性、prompt style 注入、上下文输入存在与缺失记录、非标准阶段序列拒绝、嵌套配置字段类型校验、execute 模式下真实产物校验、用户补答后同阶段恢复执行、缺失产物重试/跳过/停止、命令失败状态记录、Python bootstrap 配置生成、包内默认配置与示例配置一致、清理旧 run 目录以及 prompt 通过 stdin 传递给执行命令。
 
 \begin{table}[htbp]
 \centering
@@ -258,9 +335,21 @@ Vibe2Spec 组的差异来自 artifact 链路：需求阶段将“按天计费”
 
 是否使用 Vibe2Spec 应按任务风险决定。Direct Codex 适合需求清楚、影响范围小、反馈快的小任务；Vibe2Spec 适合业务规则隐含、后续要维护、需要复盘或多人审阅的任务。边界条件如果只停留在一句自然语言里，模型可能按常见经验实现；写成验收 fixture 后，错误更容易在实现前或验证时暴露。
 
+与 OpenSpec 类方法相比，本项目更贴近 Codex 本地开发和课程展示：它直接围绕 Codex CLI、Codex skill 和本地文件系统设计；日常默认使用 \code{vibe2spec-flow}，不强制完整平台化流程；最终产物不是停在 spec，而是生成可执行的 Codex 实现指令。代价是当前规范能力、生态成熟度和通用协作能力仍弱于大型开源规范框架。
+
 当前项目仍有明确局限。首先，实验样本少，Direct baseline 和 Vibe2Spec 组不是多次随机采样平均值，不能得出统计意义上的通用结论。其次，artifact 内容校验仍是关键词和概念组级别的检查，不能证明文档内容真的完整、正确或可执行。第三，conversation 隔离主要体现在 prompt 和目录结构上，仍依赖 Codex CLI 的真实会话行为。第四，resume 已有 run 的能力还不完整，安全边界也仍较粗；harness 负责阶段约束，不负责细粒度文件写入审批。
 
-后续优先级包括：增加 \code{resume --run-dir}，支持中断后从已有 run 继续；增强 artifact 内容校验，例如结构化 schema、验收 fixture 解析和 ADR 完整性检查；为 \code{vibe2spec-flow} 增加同步测试，避免 skill 模板和默认 harness 配置漂移；设计更严格的 direct vs Vibe2Spec 多样本实验，统计首轮通过率、漏需求数量、返工轮数和耗时。
+\subsection{后续工作}
+
+后续优先级包括：
+\begin{enumerate}
+  \item 增加 \code{resume --run-dir}，支持中断后从已有 run 继续；
+  \item 增强 artifact 内容校验，例如结构化 schema、验收 fixture 解析和 ADR 完整性检查；
+  \item 为 \code{vibe2spec-flow} 增加同步测试，避免 skill 模板和默认 harness 配置漂移；
+  \item 设计更严格的 direct vs Vibe2Spec 多样本实验，统计首轮通过率、漏需求数量、返工轮数和耗时；
+  \item 将 proration case 扩展为课程展示脚本，包括输入、运行命令、截图、probe 结果和讲解稿；
+  \item 如果未来重新引入 subagents，需要增加写域 ownership、合并协议、冲突检测和失败重试。
+\end{enumerate}
 
 \section{结论}
 
