@@ -9,7 +9,11 @@ __pycache__/
 build/
 dist/
 .harness/runs/
-examples/
+**/.harness/runs/
+examples/*
+!examples/basic.harness.json
+!examples/demo-project/
+!examples/demo-project/**
 .tinytex/
 tmp/
 output/*
