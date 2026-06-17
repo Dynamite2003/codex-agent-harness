@@ -1,53 +1,41 @@
-\documentclass[10pt,a4paper]{article}
+\documentclass[11pt,a4paper]{article}
 
 \usepackage{fontspec}
 \usepackage{xeCJK}
-\usepackage[a4paper,left=1.62cm,right=1.62cm,top=1.45cm,bottom=1.68cm,headsep=0.32cm]{geometry}
+\usepackage[a4paper,left=2.25cm,right=2.25cm,top=2.15cm,bottom=2.35cm]{geometry}
 \usepackage{booktabs}
 \usepackage{array}
-\usepackage{tabularx}
 \usepackage{enumitem}
 \usepackage{xcolor}
 \usepackage{hyperref}
 \usepackage{fancyhdr}
 \usepackage{caption}
+\usepackage{longtable}
 
 \setmainfont{Times New Roman}
 \setsansfont{Helvetica}
 \setmonofont{Courier New}
 \setCJKmainfont{Songti SC}
-\setCJKsansfont{STHeiti}
+\setCJKsansfont{Songti SC}
 \setCJKmonofont{Arial Unicode MS}
 
 \definecolor{reportblue}{HTML}{1F4E79}
-\definecolor{deepblue}{HTML}{173B5F}
-\definecolor{softblue}{HTML}{F3F7FC}
-\definecolor{lightline}{HTML}{C9D8EC}
-\definecolor{muted}{HTML}{536173}
+\definecolor{lightline}{HTML}{D9E2F3}
 
 \setlength{\parindent}{2em}
-\setlength{\parskip}{1.2pt}
-\linespread{0.97}
-\setlist{leftmargin=1.55em,itemsep=1pt,topsep=2pt,parsep=0pt,partopsep=0pt}
-\captionsetup{font=footnotesize,labelfont={bf,color=deepblue},labelsep=quad,skip=3pt}
+\setlength{\parskip}{2.5pt}
+\setlist{leftmargin=2em,itemsep=2pt,topsep=3pt,parsep=0pt}
+\captionsetup{font=small,labelfont=bf,labelsep=quad}
 \renewcommand{\abstractname}{摘要}
 \renewcommand{\refname}{参考资料}
-\renewcommand{\arraystretch}{1.12}
-\setlength{\tabcolsep}{4pt}
-\setlength{\fboxsep}{5pt}
-\setlength{\fboxrule}{0.45pt}
-\emergencystretch=2em
+\renewcommand{\arraystretch}{1.18}
+\setlength{\tabcolsep}{4.5pt}
+\emergencystretch=3em
 
 \urlstyle{tt}
-\newcommand{\code}[1]{\texttt{\footnotesize #1}}
+\newcommand{\code}[1]{\texttt{\small #1}}
 \newcommand{\important}[1]{\textbf{#1}}
 \newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
-\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
-
-\makeatletter
-\renewcommand\section{\@startsection{section}{1}{0pt}{0.75ex plus 0.25ex minus 0.15ex}{0.35ex}{\large\bfseries\color{reportblue}}}
-\renewcommand\subsection{\@startsection{subsection}{2}{0pt}{0.5ex plus 0.2ex minus 0.1ex}{0.2ex}{\normalsize\bfseries\color{deepblue}}}
-\makeatother
 
 \hypersetup{
   colorlinks=true,
@@ -60,42 +48,52 @@
 
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\footnotesize 史志远 2022011283}
-\fancyhead[R]{\footnotesize Spec-first Codex Workflow}
-\fancyfoot[C]{\footnotesize\thepage}
-\renewcommand{\headrulewidth}{0.35pt}
+\fancyhead[L]{\small 史志远 2022011283}
+\fancyhead[R]{\small Vibe2Spec 课程项目报告}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
 
 \begin{document}
 
-\begin{center}
-\vspace*{-0.3em}
-{\LARGE\bfseries\color{deepblue} Vibe2Spec：面向 Codex 的 Spec-first 软件开发流程\par}
-\vspace{0.28em}
-{\small\color{muted} 史志远 \quad 2022011283 \quad 大模型驱动的软件开发课程项目报告\par}
-\vspace{0.3em}
-{\footnotesize\color{muted}
-项目类型：本地 Codex CLI 与软件工程流程实验 \quad
-核心主题：Codex、本地开发流程、需求工程、验证 \quad
-报告日期：2026 年 6 月}
-\end{center}
-\vspace{-0.05em}
-\noindent{\color{reportblue}\rule{\textwidth}{0.9pt}}
-
-\vspace{0.25em}
-\noindent\fcolorbox{lightline}{softblue}{%
-\begin{minipage}{0.965\textwidth}
+\begin{titlepage}
+\thispagestyle{empty}
+\centering
+\vspace*{1.1cm}
+{\Huge\bfseries Vibe2Spec\par}
+\vspace{0.45cm}
+{\LARGE 面向 Codex 的 Spec-first 软件开发流程\par}
+\vspace{0.35cm}
+{\Large 大模型驱动的软件开发课程项目报告\par}
+\vspace{0.85cm}
+{\color{reportblue}\rule{0.78\textwidth}{1.2pt}\par}
+\vspace{1.0cm}
+\begin{tabular}{rl}
+\important{学生姓名：} & 史志远 \\
+\important{学号：} & 2022011283 \\
+\important{项目类型：} & 本地 Codex CLI 与软件工程流程实验 \\
+\important{核心主题：} & Codex、本地开发流程、需求工程、验证 \\
+\important{主要产物：} & CLI harness、Codex skill、artifact 校验、对比实验 \\
+\important{报告日期：} & 2026 年 6 月 \\
+\end{tabular}
+\vfill
+\begin{minipage}{0.82\textwidth}
 \small
-\noindent\textbf{\color{deepblue}摘要}\quad
-本项目围绕 Codex 本地开发流程做了一层 Spec-first 包装。做法是把一次开发目标拆成需求、设计、任务和实现 prompt 四类 artifact，再用 CLI harness 或 Codex skill 推进后续实现。完整 harness 负责记录 prompt、上下文、命令、输出和状态，适合审计和复盘；轻量 skill 直接在当前 Codex 会话中生成同类文档，适合日常使用。三组实验结果为：Todo deadline 任务中 Direct baseline 与 Vibe2Spec 均通过 16/16 功能探针；Sprint Board Lite 中二者核心功能接近，但 Vibe2Spec 保留了完整过程文件；订阅 proration 计费任务中 Direct baseline 通过 2/6，Vibe2Spec 通过 6/6。实验表明，流程的主要作用是把隐含规则提前写成需求、设计决策和验收 fixture，而不是增加代码生成步骤。
-\end{minipage}}
+本报告总结 Vibe2Spec 项目的问题背景、流程设计、系统实现和实验结果。项目目标不是重新实现一个编码模型，而是在 Codex 外层增加一组可落盘、可检查、可复盘的工程约束：先把需求、设计、任务和实现 prompt 写成文件，再进入编码和验证。
+\end{minipage}
+\end{titlepage}
 
-\vspace{0.3em}
-\noindent{\small\important{关键词：}Codex；Spec-first；需求工程；验证；开发流程}
+\setcounter{page}{1}
+
+\begin{abstract}
+本项目围绕 Codex 本地开发流程做了一层 Spec-first 包装。具体做法是把一次开发目标拆成需求、设计、任务和实现 prompt 四类 artifact，再由 CLI harness 或 Codex skill 推进后续实现。完整 harness 会记录 prompt、上下文、命令、输出和状态，适合课程展示、失败复盘和过程审计；轻量 skill 直接在当前 Codex 会话中生成同类文档，适合日常开发。三组实验结果为：Todo deadline 任务中 Direct baseline 与 Vibe2Spec 均通过 16/16 功能探针；Sprint Board Lite 中二者核心功能接近，但 Vibe2Spec 保留了更完整的过程文件；订阅 proration 计费任务中 Direct baseline 通过 2/6，Vibe2Spec 通过 6/6。实验说明，这套流程的主要作用是把隐含规则提前写成需求、设计决策和验收 fixture，而不是增加代码生成步骤。
+\end{abstract}
+
+\noindent\important{关键词：}Codex；Spec-first；需求工程；验证；开发流程
 
 \section{项目背景与问题定义}
 
-Codex 已经可以在本地仓库中阅读代码、修改文件并运行测试。对小范围修改，直接对话通常足够；但当任务包含隐含业务规则、跨模块影响或后续维护要求时，问题会集中出现在需求和验证环节：需求在聊天中被自由解释，关键设计决策缺少记录，测试只覆盖表层行为，失败时也缺少可审计状态。
+Codex 已经可以在本地仓库中阅读代码、修改文件并运行测试。对小范围修改，直接对话通常足够；但当任务包含隐含业务规则、跨模块影响或后续维护要求时，问题往往出现在编码之前：需求在聊天中被自由解释，关键设计决策缺少记录，测试只覆盖表层行为，失败时也缺少可审计状态。
 
 本项目关注的是编码前的约束如何落地。在 proration 计费实验中，原始需求只说“按天计费”，Direct baseline 将账期固定为 30 天，忽略 2 月、闰年和 31 天账期。这个问题不是语法错误，而是业务边界没有进入需求和验收标准。
 
@@ -105,49 +103,51 @@ Vibe2Spec 的处理方式是在 Codex 外层增加文件化流程，先生成可
 
 \subsection{四阶段 Artifact 链路}
 
-Vibe2Spec 固定采用 requirements、design、tasks、implementation 四个阶段。阶段之间只通过落盘 artifact 传递上下文：设计阶段读取需求文档，任务阶段读取需求和设计，实现阶段读取需求、设计和任务。每个阶段都回答四个问题：当前只做什么、可以读取什么、必须产出什么、怎样判断完成。
+Vibe2Spec 固定采用 requirements、design、tasks、implementation 四个阶段。阶段之间只通过落盘 artifact 传递上下文：设计阶段读取需求文档，任务阶段读取需求和设计，实现阶段读取需求、设计和任务。表 \ref{tab:phases} 给出主要产物和作用。
 
 \begin{table}[htbp]
 \centering
 \caption{Vibe2Spec 四阶段 artifact 链路}
 \label{tab:phases}
-\begin{tabularx}{\textwidth}{P{0.13\textwidth}P{0.26\textwidth}Y}
+\begin{tabular}{P{0.14\textwidth}P{0.30\textwidth}P{0.46\textwidth}}
 \toprule
 阶段 & 产物 & 作用 \\
 \midrule
 需求 & \code{doc/proposal.md} & 明确背景、目标、非目标、用户、失败模式、功能需求、质量需求、验收标准和验证策略。 \\
-设计 & \code{doc/detailed-design.md} & 明确模块职责、数据模型、状态流、接口契约、ADR、UI 状态和测试策略。 \\
+设计 & \code{doc/detailed-design.md} & 明确模块职责、数据模型、状态流、接口契约、ADR、风险响应和测试策略。 \\
 任务 & \code{doc/tasks/} & 将设计拆成可执行 checklist，记录文件范围、依赖关系、追溯关系和进度。 \\
 实现 & \code{doc/prompt.md} & 生成实现 prompt，要求顺序编码、验证、回写任务进度并记录偏离。 \\
 \bottomrule
-\end{tabularx}
+\end{tabular}
 \end{table}
+
+这种 artifact-only 模式并不追求复杂平台化，而是把一次自然语言开发目标变成一组稳定文件。每个阶段都能回答四个问题：当前只做什么、可以读取什么、必须产出什么、怎样判断完成。
 
 \subsection{Harness 与 Skill 两种入口}
 
 项目提供两条入口。CLI harness 会在目标项目中生成 \code{.harness/runs/<run-id>/}。每个阶段目录包含 \code{prompt.md}、\code{context.json}、\code{command.sh}、\code{stdout.txt}、\code{stderr.txt}、\code{status.json} 和 \code{conversation/}；运行根目录包含 \code{manifest.json}，记录用户目标、项目路径、阶段文件和隔离策略。这一路径主要用于课程展示、失败复盘、CI 风格复跑和需要 stdout/stderr 的场景。
 
-CLI harness 的成本是等待更长、交互更重。日常使用时可以改用 \code{vibe2spec-flow} skill：它不启动四阶段 CLI，而是在当前 Codex 会话中直接创建或更新 \code{doc/proposal.md}、\code{doc/detailed-design.md}、\code{doc/tasks/} 和 \code{doc/prompt.md}。两条路径使用同一套文档结构，只是运行成本不同。
+CLI harness 的成本是等待更长、交互更重。日常使用时可以改用 \code{vibe2spec-flow} skill：它不启动四阶段 CLI，而是在当前 Codex 会话中维护需求、设计、任务和实现 prompt 四类文档。两条路径使用同一套文档结构，只是运行成本不同。
 
-\subsection{运行控制与取舍}
+\subsection{运行控制与交互协议}
 
-执行模式下，每个阶段可抽象为小状态机：准备阶段先写入 prompt、context 和 command；命令返回非零时，状态记为 command failed；输出独占行 \code{HARNESS\_NEEDS\_USER\_INPUT} 时，状态记为 needs input；expected outputs 缺失时，状态记为 missing outputs；产物存在但内容校验失败时，状态记为 artifact invalid；只有命令成功、产物存在且校验通过时，阶段才进入 ok。
+执行模式下，每个阶段可抽象为小状态机。准备阶段先写入 prompt、context 和 command；命令返回非零时，状态记为 command failed；输出独占行 \code{HARNESS\_NEEDS\_USER\_INPUT} 时，状态记为 needs input；expected outputs 缺失时，状态记为 missing outputs；产物存在但内容校验失败时，状态记为 artifact invalid；只有命令成功、产物存在且校验通过时，阶段才进入 ok。
 
 早期实现曾根据“请确认”“需要补充”等自然语言关键词判断 Codex 是否需要用户输入。实验显示这会误触发，因为这些词可能出现在 prompt 模板、日志或普通总结中。当前版本改为显式协议：只有输出中存在独占一行的 \code{HARNESS\_NEEDS\_USER\_INPUT} 时，harness 才暂停当前阶段，并把后续问题写入 \code{needs-user-input.md}。
 
-项目没有默认使用 subagents。小任务中并行 agent 会增加文件所有权、合并顺序和上下文冲突成本，因此默认实现阶段改为单 agent 顺序执行；只有任务彼此独立、文件范围清晰且上下文明显过长时，才允许可选启用子 agents。与 OpenSpec 类方法相比，本项目更贴近 Codex 本地开发和课程展示：最终产物不是停在 spec，而是把需求、设计和任务整理成可执行的 Codex 实现 prompt；代价是规范生态、协作平台和通用阶段扩展能力较弱。
+项目没有默认使用 subagents。小任务中并行 agent 会增加文件所有权、合并顺序和上下文冲突成本，因此默认实现阶段改为单 agent 顺序执行；只有任务彼此独立、文件范围清晰且上下文明显过长时，才允许可选启用子 agents。
 
 \section{系统实现}
 
-\subsection{核心模块与 CLI}
+\subsection{核心模块}
 
-核心代码位于 \code{src/codex\_harness/}。CLI 能力包括 \code{start}、\code{run}、\code{init}、\code{init-skill-flow}、\code{validate-artifacts}、\code{bootstrap-python} 和 \code{clean-runs}。其中 \code{start} 是默认入口；如果用户直接运行 \code{./harness -C <path> "goal"}，程序会自动规范化为 \code{start}，降低课程演示和日常使用门槛。
+核心代码位于 \code{src/codex\_harness/}。表 \ref{tab:modules} 列出主要模块职责。
 
 \begin{table}[htbp]
 \centering
 \caption{核心模块职责}
 \label{tab:modules}
-\begin{tabularx}{\textwidth}{P{0.28\textwidth}Y}
+\begin{tabular}{P{0.30\textwidth}P{0.60\textwidth}}
 \toprule
 模块 & 职责 \\
 \midrule
@@ -159,8 +159,10 @@ CLI harness 的成本是等待更长、交互更重。日常使用时可以改�
 \code{skill\_flow.py} & 安装 bundled skills 并初始化 skill 工作流目录。 \\
 \code{python\_bootstrap.py} & 生成 Python 项目的 uv、ruff、mypy、pytest 配置。 \\
 \bottomrule
-\end{tabularx}
+\end{tabular}
 \end{table}
+
+CLI 能力覆盖运行、初始化、artifact 校验、Python bootstrap 和旧 run 清理。其中 \code{start} 是默认入口；如果用户直接运行 \code{./harness -C <path> "goal"}，程序会自动规范化为 \code{start}，降低课程演示和日常使用门槛。
 
 \subsection{配置、Prompt 与 Artifact 校验}
 
@@ -170,6 +172,20 @@ CLI harness 的成本是等待更长、交互更重。日常使用时可以改�
 
 Artifact 校验被改为规则表驱动。以 \code{doc/proposal.md} 为例，校验要求覆盖 Context、Goals \& Non-Goals、Target Users、Product Archetype / Success Mode / Domain Lenses、Failure Mode Lens、Functional Requirements、Behavioral Requirements、Quality Requirements、ADR Candidates、Acceptance Criteria、Verification Strategy 和 Risks。该校验仍是启发式检查，不能替代人工评审，但能防止明显的结构缺失。
 
+\section{默认流程演进}
+
+\subsection{从功能清单到质量镜头}
+
+早期默认需求文档更接近功能清单，包含 Context、Goals、User Stories、Functional Requirements、ADR Candidates 和 Acceptance Criteria。实验显示，这对简单任务足够，但对 proration 这类隐含业务规则任务不够。模型可能实现看起来合理的功能，却遗漏真实账期天数、闰年、退款符号和最终四舍五入。
+
+因此，默认配置要求需求阶段识别 Product Archetype、Success Mode、Domain Lenses 和 Failure Modes。Success Mode 包括 Correctness、Usability、Experience、Reliability、Throughput、Exploration 和 Compliance/Safety。Failure Modes 包括结果错误、流程混乱、边界状态缺失、数据丢失、权限泄漏、失败后无法恢复、AI 幻觉或越权等。目的不是让文档变长，而是让需求阶段先回答“这个项目最可能错在哪里”。
+
+\subsection{单 Agent 默认策略与技术栈适配}
+
+早期实验中，实现 prompt 倾向于鼓励 subagents。但对课程项目和小型仓库，子 agent 并行会增加文件所有权、合并顺序和上下文冲突成本。当前默认实现阶段改为单 agent 顺序执行，只有当任务彼此独立、文件范围清晰且上下文明显过长时，才允许可选启用子 agents。
+
+另一个实验问题是默认 prompt 过度绑定 Python 工具链。对于静态 Web 项目，强制要求 uv、pytest、mypy、ruff 会引入无关环境问题。当前默认实现 prompt 要求 agent 先识别项目技术栈和可用工具，再选择验证方式。Python 项目优先沿用已有测试命令；只有已经 bootstrap 或已有相应配置时，才使用 uv、pytest、mypy 和 ruff。
+
 \section{实验设计与结果}
 
 实验不试图证明 Vibe2Spec 在所有任务上都优于 Direct Codex。更合理的问题是：在哪些任务上，Spec-first 的额外成本能换来更高正确性或可追踪性？因此项目设置三类任务：简单功能任务 Todo deadline、中等复杂 UI 任务 Sprint Board Lite、隐含业务规则任务 Proration 计费边界。
@@ -178,7 +194,7 @@ Artifact 校验被改为规则表驱动。以 \code{doc/proposal.md} 为例，�
 \centering
 \caption{三组实验结果摘要}
 \label{tab:experiments}
-\begin{tabularx}{\textwidth}{P{0.22\textwidth}P{0.22\textwidth}P{0.22\textwidth}Y}
+\begin{tabular}{P{0.23\textwidth}P{0.22\textwidth}P{0.22\textwidth}P{0.23\textwidth}}
 \toprule
 任务 & Direct baseline & Vibe2Spec & 主要结论 \\
 \midrule
@@ -186,7 +202,7 @@ Todo deadline & 16/16 功能探针 & 16/16 功能探针 & 简单任务打平，D
 Sprint Board Lite & 核心契约通过 & 核心契约通过，artifact 链路完整 & 功能接近，过程文件更多。 \\
 Proration 计费 & 2/6 探针通过 & 6/6 探针通过 & 账期边界被 fixture 覆盖。 \\
 \bottomrule
-\end{tabularx}
+\end{tabular}
 \end{table}
 
 \subsection{Todo Deadline 与 Sprint Board Lite}
@@ -205,7 +221,7 @@ Proration 实验用于检查隐含业务规则。原始需求只有一句话：�
 \centering
 \caption{Proration 关键失败 case}
 \label{tab:proration}
-\begin{tabularx}{\textwidth}{Y P{0.17\textwidth}P{0.18\textwidth}Y}
+\begin{tabular}{P{0.34\textwidth}P{0.14\textwidth}P{0.18\textwidth}P{0.24\textwidth}}
 \toprule
 Case & Direct & Vibe2Spec / 期望 & 说明 \\
 \midrule
@@ -213,7 +229,7 @@ Case & Direct & Vibe2Spec / 期望 & 说明 \\
 2024 闰年 2 月 & 30.00 & 31.03 & 2024 年 2 月实际账期为 29 天。 \\
 2026 年 1 月降级退款 & -32.00 & -30.97 & 1 月账期为 31 天，退款保留负数。 \\
 \bottomrule
-\end{tabularx}
+\end{tabular}
 \end{table}
 
 Vibe2Spec 组的差异来自 artifact 链路：需求阶段将“按天计费”拆成 EARS 规则；验收阶段把 28 天、29 天、31 天退款和非法日期变成 fixture；设计阶段记录 UTC date-only arithmetic 和退款符号保留；实现 prompt 要求遵循 Spec / ADR / Acceptance Criteria；验证阶段直接调用核心计算函数，而不是只看页面是否渲染。该实验说明，边界规则需要尽早进入验收材料。
@@ -226,7 +242,7 @@ Vibe2Spec 组的差异来自 artifact 链路：需求阶段将“按天计费”
 \centering
 \caption{当前验证闭环}
 \label{tab:verification}
-\begin{tabularx}{\textwidth}{P{0.24\textwidth}P{0.34\textwidth}Y}
+\begin{tabular}{P{0.22\textwidth}P{0.43\textwidth}P{0.25\textwidth}}
 \toprule
 类型 & 命令或证据 & 结果 \\
 \midrule
@@ -235,7 +251,7 @@ Vibe2Spec 组的差异来自 artifact 链路：需求阶段将“按天计费”
 类型检查 & \code{PYTHONPATH=src .venv/bin/python -m mypy src tests} & 通过。 \\
 报告构建 & 项目内 TinyTeX + \code{xelatex} & 本报告可编译为 PDF。 \\
 \bottomrule
-\end{tabularx}
+\end{tabular}
 \end{table}
 
 \section{讨论、局限与后续工作}
@@ -244,7 +260,7 @@ Vibe2Spec 组的差异来自 artifact 链路：需求阶段将“按天计费”
 
 当前项目仍有明确局限。首先，实验样本少，Direct baseline 和 Vibe2Spec 组不是多次随机采样平均值，不能得出统计意义上的通用结论。其次，artifact 内容校验仍是关键词和概念组级别的检查，不能证明文档内容真的完整、正确或可执行。第三，conversation 隔离主要体现在 prompt 和目录结构上，仍依赖 Codex CLI 的真实会话行为。第四，resume 已有 run 的能力还不完整，安全边界也仍较粗；harness 负责阶段约束，不负责细粒度文件写入审批。
 
-后续优先级包括：增加 \code{resume --run-dir}，支持中断后从已有 run 继续；增强 artifact 内容校验，例如结构化 schema、验收 fixture 解析和 ADR 完整性检查；为 \code{vibe2spec-flow} 增加同步测试，避免 skill 模板和默认 harness 配置漂移；设计更严格的 direct vs Vibe2Spec 多样本实验，统计首轮通过率、漏需求数量、返工轮数和耗时；将 proration case 扩展为课程展示脚本，包括输入、运行命令、截图、probe 结果和讲解稿。
+后续优先级包括：增加 \code{resume --run-dir}，支持中断后从已有 run 继续；增强 artifact 内容校验，例如结构化 schema、验收 fixture 解析和 ADR 完整性检查；为 \code{vibe2spec-flow} 增加同步测试，避免 skill 模板和默认 harness 配置漂移；设计更严格的 direct vs Vibe2Spec 多样本实验，统计首轮通过率、漏需求数量、返工轮数和耗时。
 
 \section{结论}
 
