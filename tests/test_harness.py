@@ -74,6 +74,26 @@ class HarnessTests(unittest.TestCase):
 
             self.assertEqual(result, 1)
 
+    def test_validate_artifacts_reports_missing_quality_lens_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            doc = root / "doc"
+            doc.mkdir()
+            (doc / "proposal.md").write_text(
+                "# Proposal\n\n"
+                "## Context\nContext.\n\n"
+                "## Goals & Non-Goals\n目标和非目标。\n\n"
+                "## Functional Requirements (EARS)\nWHEN user acts THE SYSTEM SHALL respond.\n\n"
+                "## ADR Candidates\nDecision: simple. Why: MVP.\n\n"
+                "## Acceptance Criteria\nGIVEN state WHEN action THEN result.\n\n"
+                "## Out of Scope\n不做支付。\n",
+                encoding="utf-8",
+            )
+
+            result = main(["validate-artifacts", "-C", str(root)])
+
+            self.assertEqual(result, 1)
+
     def test_validate_artifacts_accepts_spec_first_docs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -481,11 +501,11 @@ class HarnessTests(unittest.TestCase):
                 "doc=root/'doc'; "
                 "tasks=doc/'tasks'; "
                 "tasks.mkdir(parents=True, exist_ok=True); "
-                "(doc/'proposal.md').write_text('# Proposal\\n\\n## Context\\nWhy.\\n\\n## Goals & Non-Goals\\n目标和非目标。\\n\\n## Functional Requirements (EARS)\\nWHEN user acts THE SYSTEM SHALL respond.\\n\\n## ADR Candidates\\nDecision: simple. Why: MVP.\\n\\n## Acceptance Criteria\\nGIVEN state WHEN action THEN result.\\n\\n## Out of Scope\\n不做支付。\\n', encoding='utf-8'); "
-                "(doc/'detailed-design.md').write_text('# Design\\n\\n## 模块\\nmodule core.\\n\\n## API 契约\\napi contract.\\n\\n## ADR\\nDecision: simple. Why: MVP.\\n\\n## Acceptance Mapping\\nGIVEN state WHEN action THEN result.\\n\\n## Test Strategy\\n测试验证。\\n', encoding='utf-8'); "
-                "(tasks/'core.md').write_text('# Core Tasks\\n\\n## Checklist\\n- [x] 实现 core\\n\\n## Traceability\\nEARS / ADR / Acceptance.\\n\\n## AFK/HITL\\nAFK.\\n\\n## Test Requirements\\n测试验证。\\n\\n## File Scope\\n文件 src/core.py。\\n', encoding='utf-8'); "
+                "(doc/'proposal.md').write_text('# Proposal\\n\\n## Context\\nWhy.\\n\\n## Goals & Non-Goals\\n目标和非目标。\\n\\n## Target Users\\n目标用户。\\n\\n## Product Archetype / Success Mode / Domain Lenses\\nProduct Archetype: API/SDK/CLI. Success Mode: Correctness. Domain Lenses: Interface.\\n\\n## Failure Mode Lens\\nFailure Mode: 结果错误。\\n\\n## Functional Requirements (EARS)\\nWHEN user acts THE SYSTEM SHALL respond.\\n\\n## Behavioral Requirements\\n行为需求。\\n\\n## Quality Requirements\\n质量需求。\\n\\n## ADR Candidates\\nDecision: simple. Why: MVP.\\n\\n## Acceptance Criteria\\nGIVEN state WHEN action THEN result.\\n\\n## Out of Scope\\n不做支付。\\n\\n## Verification Strategy\\n验证策略。\\n\\n## Risks\\n风险。\\n', encoding='utf-8'); "
+                "(doc/'detailed-design.md').write_text('# Design\\n\\n## 模块\\nmodule core.\\n\\n## API 契约\\napi contract.\\n\\n## Success Mode / Failure Mode Response\\nSuccess Mode: Correctness. Failure Mode: 结果错误。\\n\\n## Behavioral / Quality Design\\nBehavioral handling and Quality checks.\\n\\n## ADR\\nDecision: simple. Why: MVP.\\n\\n## Acceptance Mapping\\nGIVEN state WHEN action THEN result.\\n\\n## Test Strategy\\n测试验证。\\n', encoding='utf-8'); "
+                "(tasks/'core.md').write_text('# Core Tasks\\n\\n## Checklist\\n- [x] 实现 core\\n\\n## Traceability\\nEARS / ADR / Acceptance.\\n\\n## AFK/HITL\\nAFK. HITL: none.\\n\\n## Test Requirements\\n测试验证。\\n\\n## File Scope\\n文件 src/core.py。\\n\\n## Success Mode / Failure Mode / Quality Trace\\nSuccess Mode: Correctness. Failure Mode: 结果错误。 Quality: tested.\\n', encoding='utf-8'); "
                 "(tasks/'progress.md').write_text('# Progress\\n\\n## 顺序和阻塞\\nBlocked: none.\\n\\n- [x] core\\n', encoding='utf-8'); "
-                "(doc/'prompt.md').write_text('# Prompt\\n\\nRead doc/tasks/progress.md. Follow Spec ADR Acceptance. Run test 验证.\\n', encoding='utf-8')"
+                "(doc/'prompt.md').write_text('# Prompt\\n\\nRead doc/tasks/progress.md. Follow Spec ADR Acceptance. Run test 验证. Check Success Mode, Failure Mode, and Quality Requirements.\\n', encoding='utf-8')"
             )
             config = parse_config(
                 {
@@ -1380,16 +1400,27 @@ def _write_valid_artifacts(root: Path) -> None:
         "# Proposal\n\n"
         "## Context\nContext.\n\n"
         "## Goals & Non-Goals\n目标和非目标。\n\n"
+        "## Target Users\n目标用户。\n\n"
+        "## Product Archetype / Success Mode / Domain Lenses\n"
+        "Product Archetype: API/SDK/CLI. Success Mode: Correctness. Domain Lenses: Interface.\n\n"
+        "## Failure Mode Lens\nFailure Mode: 结果错误。\n\n"
         "## Functional Requirements (EARS)\nWHEN user acts THE SYSTEM SHALL respond.\n\n"
+        "## Behavioral Requirements\n行为需求覆盖正常和失败状态。\n\n"
+        "## Quality Requirements\n质量需求覆盖正确性和可维护性。\n\n"
         "## ADR Candidates\nDecision: simple. Why: MVP.\n\n"
         "## Acceptance Criteria\nGIVEN state WHEN action THEN result.\n\n"
-        "## Out of Scope\n不做支付。\n",
+        "## Out of Scope\n不做支付。\n\n"
+        "## Verification Strategy\n验证策略包含单元测试。\n\n"
+        "## Risks\n风险是需求遗漏。\n",
         encoding="utf-8",
     )
     (doc / "detailed-design.md").write_text(
         "# Design\n\n"
         "## 模块\nmodule core.\n\n"
         "## API 契约\napi contract.\n\n"
+        "## Success Mode / Failure Mode Response\n"
+        "Success Mode: Correctness. Failure Mode: 结果错误。\n\n"
+        "## Behavioral / Quality Design\nBehavioral flow and Quality guard.\n\n"
         "## ADR\nDecision: simple. Why: MVP.\n\n"
         "## Acceptance Mapping\nGIVEN state WHEN action THEN result.\n\n"
         "## Test Strategy\n测试验证。\n",
@@ -1403,13 +1434,17 @@ def _write_valid_artifacts(root: Path) -> None:
         "# Core Tasks\n\n"
         "## Checklist\n- [x] 实现 core\n\n"
         "## Traceability\nEARS / ADR / Acceptance.\n\n"
-        "## AFK/HITL\nAFK.\n\n"
+        "## AFK/HITL\nAFK. HITL: none.\n\n"
         "## Test Requirements\n测试验证。\n\n"
-        "## File Scope\n文件 src/core.py。\n",
+        "## File Scope\n文件 src/core.py。\n\n"
+        "## Success Mode / Failure Mode / Quality Trace\n"
+        "Success Mode: Correctness. Failure Mode: 结果错误。 Quality: tested.\n",
         encoding="utf-8",
     )
     (doc / "prompt.md").write_text(
-        "# Prompt\n\nRead doc/tasks/progress.md. Follow Spec ADR Acceptance. Run test 验证.\n",
+        "# Prompt\n\n"
+        "Read doc/tasks/progress.md. Follow Spec ADR Acceptance. Run test 验证. "
+        "Check Success Mode, Failure Mode, and Quality Requirements.\n",
         encoding="utf-8",
     )
 

@@ -41,7 +41,7 @@
 - 实现了 `requirements -> design -> tasks -> implementation` 四阶段 CLI harness。
 - 将阶段输入、prompt、上下文清单、执行命令、stdout/stderr、状态文件和 manifest 落盘。
 - 增加了 `$vibe2spec-flow` 轻量 skill，让日常使用默认不启动完整 harness。
-- 引入 artifact 内容校验，检查 `proposal.md`、`detailed-design.md`、`doc/tasks/` 和 `doc/prompt.md` 的基本 Spec-first 结构。
+- 引入 artifact 内容校验，检查 `proposal.md`、`detailed-design.md`、`doc/tasks/` 和 `doc/prompt.md` 的 Spec-first 结构，并覆盖 Product Archetype、Success Mode、Failure Modes、Behavioral Requirements、Quality Requirements 等质量镜头。
 - 默认实现阶段改为单 agent 顺序执行，subagents 只作为上下文过大或任务独立时的可选策略。
 - 通过 Todo、Sprint Board、Proration 三组实验区分了“小任务打平”“复杂 UI 流程有过程收益”“隐含业务边界有功能收益”三类情况。
 
@@ -152,7 +152,7 @@ PYTHONPATH=src .venv/bin/python -m mypy src tests
 结果：通过
 
 PYTHONPATH=src python3 -m unittest discover -s tests
-结果：31 tests OK
+结果：32 tests OK
 ```
 
 这些检查说明项目本身已经具备基本工程质量闭环。
@@ -292,7 +292,7 @@ Vibe2Spec 的优势不是让模型“更会写代码”，而是改变输入质�
 后续优先级建议如下：
 
 1. 增加 `resume --run-dir`，支持中断后从已有 run 继续。
-2. 增强 artifact 内容校验，例如标题 schema、验收标准 fixture 检查、ADR 完整性检查。
+2. 增强 artifact 内容校验，例如结构化 schema、验收标准 fixture 解析、ADR 完整性检查。
 3. 为 `$vibe2spec-flow` 增加同步测试，避免 skill 模板和默认 harness 配置漂移。
 4. 设计更严格的 direct vs Vibe2Spec 多样本实验，统计首轮通过率、漏需求数量、返工轮数和耗时。
 5. 将 proration case 扩展为课程展示脚本，包括输入、运行命令、截图、probe 结果和讲解稿。

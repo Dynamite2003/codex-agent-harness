@@ -1,3 +1,4 @@
+.DS_Store
 .venv/
 __pycache__/
 *.pyc
@@ -9,3 +10,8 @@ build/
 dist/
 .harness/runs/
 examples/
+.tinytex/
+tmp/
+output/*
+!output/pdf/
+!output/pdf/course-project-report.pdf

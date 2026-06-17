@@ -202,7 +202,7 @@ requirements -> design -> tasks -> implementation
 
 ```text
 PYTHONPATH=src python3 -m unittest discover -s tests
-结果：Ran 31 tests, OK
+结果：Ran 32 tests, OK
 ```
 
 ```text
@@ -229,10 +229,10 @@ PYTHONPATH=src python3 -m mypy src tests
 
 ### 4.4 测试覆盖结果
 
-现有 31 个单元测试覆盖了主要行为：
+现有 32 个单元测试覆盖了主要行为：
 
 - 轻量 skill flow 初始化和 quickstart 生成。
-- artifact 内容校验对缺失 Spec 章节的失败报告。
+- artifact 内容校验对缺失 Spec 章节、质量要求和 Failure Mode 结构的失败报告。
 - artifact 内容校验对完整 Spec-first 文档的通过判断。
 - 默认 `start` 流程和无子命令自动转为 `start`。
 - run 目录、阶段 prompt、context、command 文件生成。
@@ -359,11 +359,11 @@ Artifact-only 模式能显著减少长上下文污染。每个阶段的新对话
 
 这种限制是当前版本的设计取舍：先保证核心开发流程稳定，再考虑扩展。
 
-### 6.2 产物校验只检查存在性
+### 6.2 产物校验仍是轻量启发式
 
-当前 expected outputs 只校验文件或目录是否存在，不校验内容质量。例如 `doc/proposal.md` 是否真的包含背景、目标、风险和待确认问题，当前只能依赖 prompt 和人工审阅，不能由 harness 自动判断。
+当前 harness 已经不只检查文件或目录是否存在。`artifact_validation.py` 会对 `doc/proposal.md`、`doc/detailed-design.md`、`doc/tasks/` 和 `doc/prompt.md` 做轻量内容校验，覆盖 EARS、ADR、GIVEN-WHEN-THEN、Product Archetype、Success Mode、Failure Modes、Behavioral Requirements、Quality Requirements、验证策略和任务追溯等关键结构。
 
-后续可以考虑增加轻量 schema、标题检查、最小内容长度、必填章节检查或自定义 validator。
+但这仍然是关键词/概念组级别的启发式检查，不能证明文档内容真的完整、正确或可执行。后续可以考虑增加结构化 schema、标题层级检查、最小内容长度、验收 fixture 解析、ADR 完整性检查或自定义 validator。
 
 ### 6.3 Codex 追问检测已收窄，但协议仍偏轻量
 
@@ -422,7 +422,7 @@ README 已覆盖使用方式，但项目层面的架构决策、取舍理由、�
 ## 7. 后续改进建议
 
 1. 增加 `resume` 能力，让中断后的 run 可以从指定阶段继续。
-2. 增加 artifact 内容校验，至少检查必需标题和非空章节。
+2. 增强 artifact 内容校验，例如结构化 schema、验收 fixture 解析和 ADR 完整性检查。
 3. 支持可选阶段扩展，在保持默认四阶段的同时允许用户添加 review、release 等阶段。
 4. 引入结构化阶段状态输出，在当前独占行协议基础上进一步减少漏判。
 5. 明确 Codex conversation 隔离实现方式，必要时封装 Codex CLI 会话参数。

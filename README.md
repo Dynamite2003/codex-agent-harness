@@ -13,6 +13,19 @@
 
 ## 快速开始
 
+从源码安装命令行工具：
+
+```bash
+python3 -m pip install -e .
+```
+
+如果要运行 lint、类型检查和测试，安装开发依赖：
+
+```bash
+python3 -m pip install -e ".[dev]"
+make check
+```
+
 推荐日常使用轻量 skill 工作流。先安装并初始化：
 
 ```bash
@@ -53,8 +66,22 @@ codex-harness validate-artifacts -C /path/to/project
 harness -C /path/to/project "给现有 Web 项目增加登录页"
 ```
 
+生成课程项目报告 PDF：
+
+```bash
+mkdir -p tmp/pdfs/texbuild output/pdf
+.tinytex/TinyTeX/bin/universal-darwin/xelatex \
+  -interaction=nonstopmode \
+  -halt-on-error \
+  -output-directory=tmp/pdfs/texbuild \
+  doc/course-project-report.tex
+cp tmp/pdfs/texbuild/course-project-report.pdf output/pdf/course-project-report.pdf
+```
+
 课程展示样例：
 
+- 中文 LaTeX 课程项目报告：[doc/course-project-report.tex](doc/course-project-report.tex)
+- 已生成 PDF：[output/pdf/course-project-report.pdf](output/pdf/course-project-report.pdf)
 - 论文式项目报告：[doc/paper-style-report.md](doc/paper-style-report.md)
 - 完整 demo 项目：[examples/demo-project](examples/demo-project)
 - 简单 Todo 对比：[experiments/vibe2spec-vs-direct-20260605/REPORT.md](experiments/vibe2spec-vs-direct-20260605/REPORT.md)，两边功能打平，主要展示 artifact 链路。
@@ -139,7 +166,7 @@ codex-harness run --config examples/basic.harness.json --project-root /path/to/p
 
 如果某个阶段完成后缺少声明的产物，harness 会失败并在该阶段目录写入 `status.json`。
 
-默认 Spec-first 阶段还会做内容校验：`doc/proposal.md` 需要包含 EARS、ADR Candidates、GIVEN-WHEN-THEN、Out of Scope 等关键结构；`doc/detailed-design.md`、`doc/tasks/` 和 `doc/prompt.md` 也会检查基本质量项。你也可以随时运行 `codex-harness validate-artifacts -C /path/to/project` 单独校验。
+默认 Spec-first 阶段还会做内容校验：`doc/proposal.md` 需要包含 EARS、ADR Candidates、GIVEN-WHEN-THEN、Product Archetype、Success Mode、Failure Modes、Behavioral Requirements、Quality Requirements、Verification Strategy 等关键结构；`doc/detailed-design.md`、`doc/tasks/` 和 `doc/prompt.md` 也会检查基本质量项与成功模式/失败模式/质量追溯。你也可以随时运行 `codex-harness validate-artifacts -C /path/to/project` 单独校验。
 
 如果 Codex CLI 命令本身返回非零退出码，harness 不会直接打印 Python traceback，而是会在当前阶段写入
 `status.json`，标记 `command_failed` 和 `returncode`，并提示查看该阶段的 `stdout.txt` / `stderr.txt`。

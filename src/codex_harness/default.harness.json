@@ -19,6 +19,8 @@
     "如果目标项目以 Python 为主要语言，进入 harness 前必须先通过 codex-harness bootstrap-python 准备 uv 隔离环境，并配置 ruff、mypy、pytest。",
     "默认采用 Spec-first 工作流：先把需求、边界、关键决策和验收标准写成可审阅 artifact，再进入设计、任务或实现。",
     "Spec 中必须重视 WHY：关键决策要用 ADR 记录原因、替代方案和权衡；功能需求优先使用 EARS，验收标准优先使用 GIVEN-WHEN-THEN。",
+    "Spec 不是功能清单。需求阶段必须识别 Product Archetype、Success Mode、Domain Lenses 和主要 Failure Modes，并写出 Behavioral Requirements、Quality Requirements 和分层验收标准。",
+    "每个项目都必须覆盖该场景最可能失败的地方；功能存在不代表验收通过，必须满足目标用户、成功模式和质量要求。",
     "只执行当前阶段，不要提前进入后续阶段。",
     "每个阶段都视为新的独立对话；不要依赖其他阶段的聊天历史，只能通过明确声明的文档 artifact 传递上下文。",
     "不要揣测用户意图；任何关键不明确点必须向用户提问。",
@@ -51,15 +53,21 @@
       ],
       "output": [
         "请在 doc/proposal.md 生成 Spec-first 需求文档。",
-        "文档必须包含：Context、Goals & Non-Goals、User Stories、Functional Requirements (EARS)、Key Decisions / ADR Candidates、Acceptance Criteria (GIVEN-WHEN-THEN)、Out of Scope、Constraints、Open Questions。",
+        "文档必须包含：Context、Goals & Non-Goals、Target Users、Product Archetype / Success Mode / Domain Lenses、Failure Mode Lens、User Stories、Functional Requirements (EARS)、Behavioral Requirements、Quality Requirements、Key Decisions / ADR Candidates、Functional / Behavioral / Quality Acceptance Criteria (GIVEN-WHEN-THEN)、Out of Scope、Constraints、Verification Strategy、Risks、Open Questions。",
         "如果本次需求属于新 feature、跨模块改动、新 schema/API/agent、或架构级重构，请同时创建或更新 doc/specs/index.md 和 doc/specs/YYYY-MM-DD-topic.md；如果不需要独立 spec，请在 doc/proposal.md 说明理由。"
       ],
       "steps": [
         "先阅读项目目录和必要文件，判断需求是否依赖现有系统。",
         "明确哪些内容是用户已确认事实，哪些只是建议假设；不要把建议假设写成事实。",
+        "识别 Product Archetype，可多选：CRUD/Admin、Workflow/Approval、Dashboard/Analytics、Search/Discovery、Editor/Builder、Consumer App、Creative Experience、Game/Simulation、AI Assistant/Agent、Automation/Script、Data Pipeline、API/SDK/CLI、Integration/Connector、Migration/Refactor、Infrastructure/DevOps、Security/Compliance、Prototype/Spike。",
+        "识别 Success Mode，可多选并说明优先级：Correctness、Usability、Experience、Reliability、Throughput、Exploration、Compliance/Safety。",
+        "选择 Domain Lenses：Workflow、Data、Interface、Creative、Automation、Integration、AI/Agent、Security/Compliance、Migration、Operations。",
+        "识别主要 Failure Modes：结果错误、流程混乱、边界状态缺失、性能差、数据丢失、权限泄漏、不可逆操作、失败后无法恢复、视觉/交互质量低、集成漂移、AI 幻觉或越权、架构难维护。",
         "将核心功能需求写成 EARS 原子语句，例如 WHEN <触发条件> THE SYSTEM SHALL <行为>。",
+        "补充 Behavioral Requirements 和 Quality Requirements，覆盖正常、边界、失败、恢复、空/加载/部分成功、权限不足、性能、反馈、可访问性、数据正确性、可维护性等适用维度。",
         "将关键产品或技术决策记录为 ADR Candidates，至少包含 Decision、Why、Alternatives。",
-        "将可验收行为写成 GIVEN-WHEN-THEN，并确保每条都可手测或自动化验证。",
+        "将验收标准分成 Functional / Behavioral / Quality Acceptance Criteria，并使用 GIVEN-WHEN-THEN，确保每条都可手测、自动化验证或明确 HITL 审查。",
+        "定义 Verification Strategy：单元、集成、契约、UI 状态、权限矩阵、迁移 dry-run、性能预算、可访问性、视觉截图、AI eval/replay、人工创意/法律/品牌审查中适用的检查。",
         "使用提问的方式确认不明确的需求；不要替用户补全关键决策。",
         "如果信息足够，生成 proposal.md；如果信息不足，proposal.md 中必须列出阻塞问题和推荐的下一轮提问。",
         "不要做设计、任务拆分或代码实现。"
@@ -81,10 +89,13 @@
       ],
       "output": [
         "设计文档 doc/detailed-design.md。",
-        "设计文档必须包含：Context、Goals & Non-Goals、模块划分、数据模型、状态机或关键流程、API / 本地契约、Key Design Decisions (ADR)、Acceptance Criteria 映射、风险和测试策略。"
+        "设计文档必须包含：Context、Goals & Non-Goals、模块划分、数据模型、状态机或关键流程、API / 本地契约、Success Mode / Domain Lenses / Failure Modes 的设计响应、Behavioral / Quality Requirements 的设计方案、适用的 UI 状态矩阵/数据不变量/AI 边界/集成降级/探索学习计划、Key Design Decisions (ADR)、Acceptance Criteria 映射、风险和验证策略。"
       ],
       "steps": [
         "根据需求文档的内容，划分出模块，识别模块之间的关系，生成详细设计文档。",
+        "读取需求中的 Product Archetype、Success Mode、Domain Lenses、Failure Modes、Functional/Behavioral/Quality Acceptance Criteria；如果缺失，基于需求补充保守推断并标记为设计假设。",
+        "明确每个高风险 Failure Mode 由哪个模块、状态、流程、约束或验证方式覆盖。",
+        "对 UI 项目输出页面/组件状态矩阵；对数据/工作流项目输出状态机、不变量和权限矩阵；对 AI/Agent 项目输出工具边界、记忆/隐私、拒答/升级和 eval 集；对集成项目输出超时、重试、幂等、降级和契约测试；对原型项目输出学习目标和可丢弃边界。",
         "把需求阶段的 ADR Candidates 收敛为明确 ADR；每条 ADR 必须说明 Decision、Why、Alternatives / Tradeoffs。",
         "如果实现会改变既有关键行为或已有 spec，必须在设计文档中列出需要回填的 spec 文件。",
         "验收标准必须能映射到后续任务和测试，不要只写泛化的“功能正常”。",
@@ -112,14 +123,16 @@
         "任务列表：",
         "- doc/tasks/<module-name>.md（每一个模块对应一个）。",
         "- doc/tasks/progress.md（总体进度）。",
-        "每个任务文件必须包含：模块目标、依赖输入、Out of Scope、任务 checklist、验收标准、测试要求、AFK/HITL 标记、Blocked by、可能修改的文件范围。"
+        "每个任务文件必须包含：模块目标、依赖输入、Out of Scope、任务 checklist、追溯关系、验收标准、测试要求、AFK/HITL 标记、Blocked by、可能修改的文件范围、Success Mode / Failure Mode / Quality Trace。"
       ],
       "steps": [
         "根据需求文档和详细设计，为每一个模块生成最小可执行、可验证任务。",
         "优先按端到端垂直切片拆分，而不是只按技术层拆分。",
         "每一个模块对应一个 <module-name>.md，用 checklist 表示子任务是否完成。",
         "在 progress.md 中用 checklist 表示模块是否完成。",
-        "每个任务必须能追溯到 EARS 需求、ADR 或 Acceptance Criteria。",
+        "每个任务必须能追溯到 EARS 需求、ADR 或 Acceptance Criteria；同时补充追溯到 Functional/Behavioral/Quality Acceptance Criteria、Failure Mode 或 Quality Requirement。",
+        "任务集合必须包含核心功能实现、边界/失败状态实现、质量 pass 和验证 pass；不要只拆功能模块。",
+        "按场景补充专门任务：UI 状态覆盖、权限矩阵、数据不变量、迁移 dry-run、集成契约、AI eval/replay、性能预算、可访问性、视觉截图或人工品牌/法律/创意审查。",
         "用 AFK 标记可由 agent 独立完成的任务；用 HITL 标记需要人工确认、密钥、外部账号、产品决策或高风险操作的任务。",
         "任何会影响任务划分的不明确点必须向用户询问，不要猜测我的意图。",
         "不要修改业务代码。"
@@ -152,10 +165,12 @@
         "只有当任务彼此独立、文件范围清晰、预计单 agent 上下文会明显过长时，doc/prompt.md 才允许可选启用子 agents；不得强制并行或强制开启多个 subagents。",
         "如果启用子 agents，doc/prompt.md 必须要求先声明文件所有权、合并顺序和冲突处理策略。",
         "doc/prompt.md 必须要求实现时遵守 Spec / ADR / Acceptance Criteria；如代码实现偏离 spec，必须回填相关文档或记录偏离原因。",
+        "doc/prompt.md 必须要求实现不能只按 checklist 勾完；还要验证 Success Mode、主要 Failure Modes 和 Quality Requirements 是否满足。",
         "doc/prompt.md 必须要求 agent 根据对应的 doc/tasks/<module-name>.md 实现代码、按项目技术栈补充 focused tests 或等价验证，并把完成状态回写到任务 checklist。",
         "doc/prompt.md 必须要求 agent 先识别现有技术栈和可用工具，再选择验证命令；不要为静态 Web、无依赖项目或已有项目强行引入不存在的 uv、pytest、mypy、ruff、npm、node。",
         "doc/prompt.md 必须要求 Python 项目优先沿用仓库现有测试命令；只有已经 bootstrap-python 或项目已有 uv/pytest/mypy/ruff 配置时，才使用 uv run pytest、uv run mypy、uv run ruff check .。",
         "doc/prompt.md 必须要求静态 Web 或无依赖前端项目至少做契约测试、源码级逻辑测试、DOM smoke 或浏览器截图验证；如果浏览器或运行时不可用，要记录不可用原因和替代验证。",
+        "doc/prompt.md 必须要求按 Success Mode 做验证：Correctness 看不变量和边界用例；Usability 看关键任务路径和状态覆盖；Experience 看反馈、节奏、视觉/交互质量；Reliability 看失败恢复；Throughput 看性能预算；Exploration 看假设是否被验证；Compliance/Safety 看权限、审计和人工审核。",
         "doc/prompt.md 必须要求最终报告包含：完成项、关键文件、验证命令与结果、未验证风险、spec 回填或偏离记录。",
         "生成 prompt 过程中任何不明确的地方需要向我提问，不要猜测我的意图。"
       ],
